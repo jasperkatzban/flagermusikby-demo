@@ -4,18 +4,22 @@ import {
   Clock,
   Color,
   DirectionalLight,
-  HemisphereLight,
   Mesh,
   MeshStandardMaterial,
   OrthographicCamera,
   Scene,
   SphereGeometry,
   Vector3,
+  Vector4,
   WebGLRenderer,
+  ShaderMaterial
 } from 'three';
-import { EventSource, ResourcePool } from './lib';
 import { getRapier, Rapier } from './physics/rapier';
+import { EventSource, ResourcePool } from './lib';
+import toonVertexShader from './shaders/toon.vert?raw'
+import toonFragmentShader from './shaders/toon.frag?raw'
 import * as Stats from 'stats.js';
+import { Vec3 } from 'cannon-es';
 
 // Set up FPS stats
 const stats = new Stats()
@@ -28,7 +32,7 @@ type Particle = {
   x: number,
   y: number,
   sphereBody: RigidBody,
-  sphereMesh: Mesh,
+  sphereMesh: THREE.Mesh,
   hasReflected: boolean
 }
 
@@ -84,7 +88,6 @@ export class Engine {
     this.camera.updateMatrixWorld();
 
     this.sunlight = this.createSunlight();
-    this.createAmbientLight();
     this.renderer = this.createRenderer();
 
     this.cursorPos = new Vector3(0, 0, 0);
@@ -113,8 +116,15 @@ export class Engine {
     this.eventQueue = new r.EventQueue(true);
 
     // Create cursor
-    const cursorMaterial = new MeshStandardMaterial({ color: 0xffffff });
-    const cursorGeometry = new SphereGeometry(1, 1, 1);
+    const cursorMaterial = new ShaderMaterial({
+      uniforms: {
+        color:
+          { value: new Vector4(1.0, 1.0, 1.0, 1.0) }
+      },
+      vertexShader: toonVertexShader,
+      fragmentShader: toonFragmentShader,
+    })
+    const cursorGeometry = new SphereGeometry(1, 5);
     this.cursorMesh = new Mesh(cursorGeometry, cursorMaterial);
     this.scene.add(this.cursorMesh)
 
@@ -163,7 +173,7 @@ export class Engine {
 
       // Update appearance of particle based on state
       if (particle.hasReflected) {
-        particle.sphereMesh.material.color.set("red")
+        particle.sphereMesh.material.uniforms.color.value = new Vector4(0.77, 0.94, 0.96, 1.0);
       }
 
       // Remove particles if out of bounds
@@ -245,10 +255,17 @@ export class Engine {
       // Capture unique identifier for particle body
       const handle = sphereBody.handle;
 
-      // Create rendered sphere
-      const material = new MeshStandardMaterial({ color: 0xffff00 });
-      const geometry = new SphereGeometry(this.particleSize, 2, 2);
-      const sphereMesh = new Mesh(geometry, material);
+      // Create rendered particle
+      const particleMaterial = new ShaderMaterial({
+        uniforms: {
+          color:
+            { value: new Vector4(1.0, 1.0, 1.0, 1.0) }
+        },
+        vertexShader: toonVertexShader,
+        fragmentShader: toonFragmentShader,
+      })
+      const geometry = new SphereGeometry(this.particleSize, 0, 5);
+      const sphereMesh = new Mesh(geometry, particleMaterial);
       this.scene.add(sphereMesh)
 
       // Flag for if particle has reflected
@@ -276,7 +293,6 @@ export class Engine {
 
   /** Render the scene. */
   public render() {
-    this.adjustLightPosition();
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -303,6 +319,7 @@ export class Engine {
 
   private createSunlight() {
     const sunlight = new DirectionalLight(new Color('#ffffff').convertSRGBToLinear(), 0.4);
+    sunlight.position.set(0, 1, 1);
     sunlight.castShadow = true;
     sunlight.shadow.mapSize.width = 1024;
     sunlight.shadow.mapSize.height = 1024;
@@ -313,28 +330,6 @@ export class Engine {
     sunlight.shadow.camera.top = 15;
     sunlight.shadow.camera.bottom = -15;
     this.scene.add(sunlight);
-    this.scene.add(sunlight.target);
     return sunlight;
-  }
-
-  public createAmbientLight() {
-    const light = new HemisphereLight(
-      new Color(0xb1e1ff).multiplyScalar(0.2).convertSRGBToLinear(),
-      new Color(0xb97a20).multiplyScalar(0.2).convertSRGBToLinear(),
-      0.6
-    );
-    this.scene.add(light);
-    return light;
-  }
-
-  private adjustLightPosition() {
-    // Adjust shadow map bounds
-    const lightPos = this.sunlight.target.position;
-    lightPos.copy(this.viewPosition);
-
-    // Quantizing the light's location reduces the amount of shadow jitter.
-    lightPos.x = Math.round(lightPos.x);
-    lightPos.z = Math.round(lightPos.z);
-    this.sunlight.position.set(lightPos.x + 6, lightPos.y + 8, lightPos.z + 4);
   }
 }
