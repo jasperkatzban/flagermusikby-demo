@@ -182,6 +182,12 @@ export class Engine {
       const position = particle.sphereBody!.translation();
       particle.sphereMesh.position.set(position.x, position.y, 0);
 
+      // Update particle scale in renderer
+      const scaleDecayCoeff = .01;
+      const scale = particle.sphereMesh.scale
+      particle.sphereMesh.scale.set(scale.x + scaleDecayCoeff, scale.y + scaleDecayCoeff, scale.z + scaleDecayCoeff);
+
+      // Update particle color in renderer
       const colorDecayCoeff = 1.0 / this.maxParticleAge;
       const color = particle.sphereMesh.material.uniforms.color.value;
       particle.sphereMesh.material.uniforms.color.value = new Vector4(
