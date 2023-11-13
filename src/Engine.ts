@@ -1,4 +1,3 @@
-import type { RigidBody, World } from '@dimforge/rapier2d';
 import {
   BoxGeometry,
   Clock,
@@ -19,7 +18,6 @@ import { EventSource, ResourcePool } from './lib';
 import toonVertexShader from './shaders/toon.vert?raw'
 import toonFragmentShader from './shaders/toon.frag?raw'
 import * as Stats from 'stats.js';
-import { Vec3 } from 'cannon-es';
 
 // Set up FPS stats
 const stats = new Stats()
@@ -33,7 +31,7 @@ type Particle = {
   y: number,
   sphereBody: RigidBody,
   sphereMesh: THREE.Mesh,
-  hasReflected: boolean
+  needsUpdate: boolean
 }
 
 /** Contains the three.js renderer and handles to important resources. */
@@ -65,14 +63,16 @@ export class Engine {
   private numParticles: number;
   private particleSize: number;
   private particleVelocity: number;
+  private particleJitter: number;
   private particleSpawnDistance: number;
   private particles: Array<Particle>
 
   constructor() {
     // Constants for physics engine
-    this.numParticles = 10;
-    this.particleSize = .5;
+    this.numParticles = 128;
+    this.particleSize = .1;
     this.particleVelocity = 10;
+    this.particleJitter = 1.0;
     this.particleSpawnDistance = 0;
     this.particles = [];
 
@@ -124,7 +124,7 @@ export class Engine {
       vertexShader: toonVertexShader,
       fragmentShader: toonFragmentShader,
     })
-    const cursorGeometry = new SphereGeometry(1, 5);
+    const cursorGeometry = new SphereGeometry(.4, 5);
     this.cursorMesh = new Mesh(cursorGeometry, cursorMaterial);
     this.scene.add(this.cursorMesh)
 
@@ -160,7 +160,7 @@ export class Engine {
     this.eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
       this.particles.forEach((particle) => {
         if (particle.handle == handle1 || particle.handle == handle2) {
-          particle.hasReflected = true;
+          particle.needsUpdate = true;
         }
       })
     });
@@ -171,9 +171,17 @@ export class Engine {
       particle.x = t.x
       particle.y = t.y
 
-      // Update appearance of particle based on state
-      if (particle.hasReflected) {
+      // Update particle if it has collided;
+      if (particle.needsUpdate) {
+        // Update position
         particle.sphereMesh.material.uniforms.color.value = new Vector4(0.77, 0.94, 0.96, 1.0);
+
+        let linVel = particle.sphereBody.linvel();
+        let newX = linVel.x + this.particleJitter * (Math.random() - .5)
+        let newY = linVel.y + this.particleJitter * (Math.random() - .5)
+        particle.sphereBody.setLinvel(new this.rapier.Vector2(newX, newY), true);
+
+        particle.needsUpdate = false;
       }
 
       // Remove particles if out of bounds
@@ -224,13 +232,14 @@ export class Engine {
   }
 
   public spawnWavefront(pos: Vector3) {
+    const angleJitter = Math.random();
     // Create particles in wavefront in a circular arrangement
     for (let i = 0; i < this.numParticles; i++) {
       // Calculate initial position and velocity of particles
-      const angle = (i / this.numParticles) * Math.PI * 2;
+      const angle = (i / this.numParticles) * Math.PI * 2 + angleJitter;
 
-      const x = pos.x + this.particleSpawnDistance * Math.sin(angle)
-      const y = pos.y + this.particleSpawnDistance * Math.cos(angle)
+      const x = pos.x + this.particleSpawnDistance * Math.sin(angle);
+      const y = pos.y + this.particleSpawnDistance * Math.cos(angle);
 
       const xVel = this.particleVelocity * Math.sin(angle)
       const yVel = this.particleVelocity * Math.cos(angle)
@@ -270,10 +279,10 @@ export class Engine {
 
       // Flag for if particle has reflected
       // TODO: this will likely become a more nuanced state to handle multiple reflections off of multiple surfaces
-      const hasReflected = false;
+      const needsUpdate = false;
 
       // Add particle to global particle array
-      const particle = { handle, x, y, sphereBody, sphereMesh, hasReflected }
+      const particle = { handle, x, y, sphereBody, sphereMesh, needsUpdate }
       this.particles.push(particle)
     }
   }
