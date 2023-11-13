@@ -11,12 +11,18 @@ import {
   Vector3,
   Vector4,
   WebGLRenderer,
-  ShaderMaterial
+  ShaderMaterial,
+  AudioListener,
+  PositionalAudio,
+  AudioLoader
 } from 'three';
 import { getRapier, Rapier } from './physics/rapier';
 import { EventSource, ResourcePool } from './lib';
 import toonVertexShader from './shaders/toon.vert?raw'
 import toonFragmentShader from './shaders/toon.frag?raw'
+
+import chirp from './sounds/chirp-placeholder.wav'
+
 import * as Stats from 'stats.js';
 
 // Set up FPS stats
@@ -69,6 +75,10 @@ export class Engine {
   private maxParticleAge: number;
   private particles: Array<Particle>
 
+  // Audio Setup
+  private listener: AudioListener;
+  private sound: PositionalAudio;
+
   constructor() {
     // Constants for physics engine
     this.numParticles = 128;
@@ -94,6 +104,13 @@ export class Engine {
     this.renderer = this.createRenderer();
 
     this.cursorPos = new Vector3(0, 0, 0);
+
+    // Set up audio listener
+    this.listener = new AudioListener();
+    this.camera.add(this.listener);
+
+    // create the PositionalAudio object (passing in the listener)
+    this.sound = new PositionalAudio(this.listener);
   }
 
   /** Shut down the renderer and release all resources. */
@@ -130,6 +147,17 @@ export class Engine {
     const cursorGeometry = new SphereGeometry(.4, 5);
     this.cursorMesh = new Mesh(cursorGeometry, cursorMaterial);
     this.scene.add(this.cursorMesh)
+
+
+
+    // load a sound and set it as the PositionalAudio object's buffer
+    const audioLoader = new AudioLoader();
+    let sound = this.sound;
+    audioLoader.load(chirp, function (buffer) {
+      sound.setBuffer(buffer);
+      sound.setRefDistance(200);
+    });
+    this.cursorMesh.add(this.sound);
 
     // Add world map
     this.addMap();
@@ -225,6 +253,7 @@ export class Engine {
 
   public fireClickEvent() {
     this.spawnWavefront(this.cursorPos);
+    this.sound.play();
   }
 
   public addMap() {
