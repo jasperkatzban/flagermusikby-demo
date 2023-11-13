@@ -1,24 +1,36 @@
-import type { RigidBody, World } from '@dimforge/rapier3d';
+import type { RigidBody, World } from '@dimforge/rapier2d';
 import {
+  BoxGeometry,
   Clock,
   Color,
   DirectionalLight,
   HemisphereLight,
-  MathUtils,
   Mesh,
   MeshStandardMaterial,
   OrthographicCamera,
   Scene,
   SphereGeometry,
-  sRGBEncoding,
   Vector3,
   WebGLRenderer,
 } from 'three';
 import { EventSource, ResourcePool } from './lib';
 import { getRapier, Rapier } from './physics/rapier';
-import { TerrainShape } from './terrain/TerrainShape';
+import * as Stats from 'stats.js';
 
-const cameraOffset = new Vector3();
+// Set up FPS stats
+const stats = new Stats()
+stats.showPanel(0)
+document.body.appendChild(stats.dom)
+
+// TODO: make this a dedicated class
+type Particle = {
+  handle: number,
+  x: number,
+  y: number,
+  sphereBody: RigidBody,
+  sphereMesh: Mesh,
+  hasReflected: boolean
+}
 
 /** Contains the three.js renderer and handles to important resources. */
 export class Engine {
@@ -29,20 +41,38 @@ export class Engine {
   public readonly viewPosition = new Vector3();
   public viewAngle = 0;
   public readonly update = new EventSource<{ update: number }>();
+
   public rapier!: Rapier;
+  private physicsWorld?: World;
+  private eventQueue: any;
 
   private mount: HTMLElement | undefined;
   private frameId: number | null = null;
   private clock = new Clock();
-  private frustumSize = 300;
+
+  // Renderer setup
+  private frustumSize = 50;
   private aspect = window.innerWidth / window.innerHeight;
   private sunlight: DirectionalLight;
-  private terrain: TerrainShape[] = [];
-  private physicsWorld?: World;
-  private sphere: Mesh;
-  private sphereBody?: RigidBody;
+  private cursorMesh?: Mesh;
+  private cursorPos: Vector3;
+
+  // Objects setup
+  private numParticles: number;
+  private particleSize: number;
+  private particleVelocity: number;
+  private particleSpawnDistance: number;
+  private particles: Array<Particle>
 
   constructor() {
+    // Constants for physics engine
+    this.numParticles = 10;
+    this.particleSize = .5;
+    this.particleVelocity = 10;
+    this.particleSpawnDistance = 0;
+    this.particles = [];
+
+    // Set up renderer scene
     this.animate = this.animate.bind(this);
     this.camera = new OrthographicCamera(
       this.frustumSize * this.aspect / - 2,
@@ -50,30 +80,14 @@ export class Engine {
       this.frustumSize / 2,
       this.frustumSize / - 2, 0.1, 100
     );
+    this.camera.position.set(0, 0, 1);
+    this.camera.updateMatrixWorld();
+
     this.sunlight = this.createSunlight();
     this.createAmbientLight();
     this.renderer = this.createRenderer();
 
-    const geometry = new SphereGeometry(1, 32, 16);
-    const material = new MeshStandardMaterial({ color: 0xffff00 });
-    this.sphere = new Mesh(geometry, material);
-    this.sphere.castShadow = true;
-    this.scene.add(this.sphere);
-
-    // Generate some terrain patches.
-    for (let y = -32; y < 32; y += 16) {
-      for (let x = -32; x < 32; x += 16) {
-        const terrain = new TerrainShape(new Vector3(x, 0, y));
-        terrain.addToScene(this.scene);
-        this.terrain.push(terrain);
-        this.pool.add(terrain);
-      }
-    }
-
-    cameraOffset.setFromSphericalCoords(20, MathUtils.degToRad(75), this.viewAngle);
-    this.camera.position.copy(this.viewPosition).add(cameraOffset);
-    this.camera.lookAt(this.viewPosition);
-    this.camera.updateMatrixWorld();
+    this.cursorPos = new Vector3(0, 0, 0);
   }
 
   /** Shut down the renderer and release all resources. */
@@ -92,27 +106,20 @@ export class Engine {
     // Physics objects cannot be created until after physics engine is initialized.
     const r = (this.rapier = await getRapier());
 
-    // Create physics for terrain
-    const gravity = new Vector3(0.0, -9.81, 0.0);
+    // Create physics
+    const gravity = { x: 0, y: 0 };
     this.physicsWorld = new r.World(gravity);
-    this.terrain.forEach(terr => terr.addPhysics(this.physicsWorld!, r));
+    // To avoid leaking WASM resources, this MUST be freed manually with eventQueue.free() once you are done using it.
+    this.eventQueue = new r.EventQueue(true);
 
-    // Create rigid body for the sphere.
-    const rbDesc = r.RigidBodyDesc.dynamic()
-      .setTranslation(6, 4, 0)
-      .setLinearDamping(0.1)
-      // .restrictRotations(false, true, false) // Y-axis only
-      .setCcdEnabled(true);
-    this.sphereBody = this.physicsWorld.createRigidBody(rbDesc);
+    // Create cursor
+    const cursorMaterial = new MeshStandardMaterial({ color: 0xffffff });
+    const cursorGeometry = new SphereGeometry(1, 1, 1);
+    this.cursorMesh = new Mesh(cursorGeometry, cursorMaterial);
+    this.scene.add(this.cursorMesh)
 
-    const clDesc = this.rapier.ColliderDesc.ball(1)
-      .setFriction(0.1)
-      .setFrictionCombineRule(r.CoefficientCombineRule.Max)
-      // .setTranslation(0, 0, 0)
-      .setRestitution(0.6)
-      .setRestitutionCombineRule(r.CoefficientCombineRule.Max);
-    // .setCollisionGroups(CollisionMask.ActorMask | CollisionMask.TouchActor);
-    this.physicsWorld.createCollider(clDesc, this.sphereBody);
+    // Add world map
+    this.addMap();
 
     if (!this.frameId) {
       this.clock.start();
@@ -135,10 +142,123 @@ export class Engine {
     // Run callbacks.
     this.update.emit('update', deltaTime);
 
-    // Run physics
-    this.physicsWorld?.step();
-    const t = this.sphereBody!.translation();
-    this.sphere.position.set(t.x, t.y, t.z);
+    // Run physics 
+    this.physicsWorld?.step(this.eventQueue);
+
+    // Check for collision events
+    // TODO: specify type of collision based on type of material contacted
+    this.eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
+      this.particles.forEach((particle) => {
+        if (particle.handle == handle1 || particle.handle == handle2) {
+          particle.hasReflected = true;
+        }
+      })
+    });
+
+    // Update rendered wavefront positions
+    this.particles.forEach((particle) => {
+      const t = particle.sphereBody!.translation();
+      particle.x = t.x
+      particle.y = t.y
+
+      // Update appearance of particle based on state
+      if (particle.hasReflected) {
+        particle.sphereMesh.material.color.set("red")
+      }
+
+      // Remove particles if out of bounds
+      // TODO: remove based on alive time, not based on position
+      if (Math.abs(particle.x) > 100 || Math.abs(particle.y) > 100) {
+        this.scene.remove(particle.sphereMesh)
+      } else {
+        particle.sphereMesh.position.set(particle.x, particle.y, 0);
+      }
+    })
+  }
+
+  public updateCursorPos(mouse: { x: number, y: number }) {
+    // Make the cursor follow the mouse
+    let zoomFactor = .5 / this.camera.zoom * this.frustumSize;
+    this.cursorPos = new Vector3(mouse.x * this.aspect * zoomFactor, mouse.y * zoomFactor, 0.0);
+
+    this.cursorMesh?.position.copy(this.cursorPos);
+  }
+
+  public fireClickEvent() {
+    this.spawnWavefront(this.cursorPos);
+  }
+
+  public addMap() {
+    // Create wall rigid body
+    const rbDescWall = this.rapier.RigidBodyDesc.kinematicPositionBased()
+      .setTranslation(0, 10)
+      .setCcdEnabled(true);
+    const wallBody = this.physicsWorld!.createRigidBody(rbDescWall);
+
+    // Create wall collider
+    const clDescWall = this.rapier.ColliderDesc.cuboid(20, .5)
+      .setFriction(0.0)
+      .setFrictionCombineRule(this.rapier.CoefficientCombineRule.Max)
+      .setRestitution(1.0)
+      .setCollisionGroups(0x00020001)
+      .setRestitutionCombineRule(this.rapier.CoefficientCombineRule.Max)
+      .setActiveEvents(this.rapier.ActiveEvents.COLLISION_EVENTS);
+    this.physicsWorld!.createCollider(clDescWall, wallBody);
+
+    // Create rendered wall
+    const material = new MeshStandardMaterial({ color: 0xffff00 });
+    const geometry = new BoxGeometry(40, 1);
+    const wallMesh = new Mesh(geometry, material);
+    wallMesh.position.set(0, 10, 0);
+    this.scene.add(wallMesh)
+  }
+
+  public spawnWavefront(pos: Vector3) {
+    // Create particles in wavefront in a circular arrangement
+    for (let i = 0; i < this.numParticles; i++) {
+      // Calculate initial position and velocity of particles
+      const angle = (i / this.numParticles) * Math.PI * 2;
+
+      const x = pos.x + this.particleSpawnDistance * Math.sin(angle)
+      const y = pos.y + this.particleSpawnDistance * Math.cos(angle)
+
+      const xVel = this.particleVelocity * Math.sin(angle)
+      const yVel = this.particleVelocity * Math.cos(angle)
+
+      // Create physics simulation particle
+      const rbDesc = this.rapier.RigidBodyDesc.dynamic()
+        .setTranslation(x, y)
+        .setLinvel(xVel, yVel)
+        .setCcdEnabled(true);
+      const sphereBody = this.physicsWorld!.createRigidBody(rbDesc);
+
+      // Create collider for particle
+      const clDesc = this.rapier.ColliderDesc.ball(this.particleSize)
+        .setFriction(0.0)
+        .setFrictionCombineRule(this.rapier.CoefficientCombineRule.Max)
+        .setRestitution(1.0)
+        .setRestitutionCombineRule(this.rapier.CoefficientCombineRule.Max)
+        .setCollisionGroups(0x00010002)
+        .setActiveEvents(this.rapier.ActiveEvents.COLLISION_EVENTS)
+      this.physicsWorld!.createCollider(clDesc, sphereBody);
+
+      // Capture unique identifier for particle body
+      const handle = sphereBody.handle;
+
+      // Create rendered sphere
+      const material = new MeshStandardMaterial({ color: 0xffff00 });
+      const geometry = new SphereGeometry(this.particleSize, 2, 2);
+      const sphereMesh = new Mesh(geometry, material);
+      this.scene.add(sphereMesh)
+
+      // Flag for if particle has reflected
+      // TODO: this will likely become a more nuanced state to handle multiple reflections off of multiple surfaces
+      const hasReflected = false;
+
+      // Add particle to global particle array
+      const particle = { handle, x, y, sphereBody, sphereMesh, hasReflected }
+      this.particles.push(particle)
+    }
   }
 
   /** Return the elapsed running time. */
@@ -151,6 +271,7 @@ export class Engine {
     this.updateScene(deltaTime);
     this.render();
     this.frameId = window.requestAnimationFrame(this.animate);
+    stats.update()
   }
 
   /** Render the scene. */
@@ -177,7 +298,6 @@ export class Engine {
     renderer.autoClearColor = true;
     renderer.autoClearDepth = true;
     renderer.autoClearStencil = false;
-    renderer.outputEncoding = sRGBEncoding;
     return renderer;
   }
 

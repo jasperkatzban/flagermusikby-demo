@@ -12,11 +12,13 @@ export function createApp() {
   orbitControls.listenToKeyEvents(renderElt); // optional
 
   orbitControls.enableDamping = true; // an animation loop is required when either damping or auto-rotation are enabled
+  orbitControls.enableRotate = false;
   orbitControls.dampingFactor = 0.05;
   orbitControls.screenSpacePanning = false;
   orbitControls.minDistance = 20;
   orbitControls.maxDistance = 100;
   orbitControls.maxPolarAngle = Math.PI / 2;
+  // orbitControls.zoomToCursor = true;
 
   orbitControls.update();
   engine.update.subscribe('update', () => {
