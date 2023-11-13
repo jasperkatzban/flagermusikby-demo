@@ -29,6 +29,7 @@ type Particle = {
   handle: number,
   x: number,
   y: number,
+  age: number,
   sphereBody: RigidBody,
   sphereMesh: THREE.Mesh,
   needsUpdate: boolean
@@ -65,6 +66,7 @@ export class Engine {
   private particleVelocity: number;
   private particleJitter: number;
   private particleSpawnDistance: number;
+  private maxParticleAge: number;
   private particles: Array<Particle>
 
   constructor() {
@@ -74,6 +76,7 @@ export class Engine {
     this.particleVelocity = 10;
     this.particleJitter = 1.0;
     this.particleSpawnDistance = 0;
+    this.maxParticleAge = 400;
     this.particles = [];
 
     // Set up renderer scene
@@ -167,15 +170,33 @@ export class Engine {
 
     // Update rendered wavefront positions
     this.particles.forEach((particle) => {
-      const t = particle.sphereBody!.translation();
-      particle.x = t.x
-      particle.y = t.y
+      // If particle is passed lifecycle, remove it from world
+      if (particle.age > this.maxParticleAge) {
+        // TODO: remove from physics world too
+        // this.physicsWorld.removeRigidBody(particle.sphereBody);
+        this.scene.remove(particle.sphereMesh);
+        return;
+      }
+
+      // Update particle position in renderer
+      const position = particle.sphereBody!.translation();
+      particle.sphereMesh.position.set(position.x, position.y, 0);
+
+      const colorDecayCoeff = 1.0 / this.maxParticleAge;
+      const color = particle.sphereMesh.material.uniforms.color.value;
+      particle.sphereMesh.material.uniforms.color.value = new Vector4(
+        color.x - colorDecayCoeff,
+        color.y - colorDecayCoeff,
+        color.z - colorDecayCoeff,
+        color.w
+      );
 
       // Update particle if it has collided;
       if (particle.needsUpdate) {
-        // Update position
-        particle.sphereMesh.material.uniforms.color.value = new Vector4(0.77, 0.94, 0.96, 1.0);
+        // Update color in renderer
+        particle.sphereMesh.material.uniforms.color.value = new Vector4(color.x, color.y, color.z + .5, color.w);
 
+        // Update velocity
         let linVel = particle.sphereBody.linvel();
         let newX = linVel.x + this.particleJitter * (Math.random() - .5)
         let newY = linVel.y + this.particleJitter * (Math.random() - .5)
@@ -184,13 +205,7 @@ export class Engine {
         particle.needsUpdate = false;
       }
 
-      // Remove particles if out of bounds
-      // TODO: remove based on alive time, not based on position
-      if (Math.abs(particle.x) > 100 || Math.abs(particle.y) > 100) {
-        this.scene.remove(particle.sphereMesh)
-      } else {
-        particle.sphereMesh.position.set(particle.x, particle.y, 0);
-      }
+      particle.age += 1;
     })
   }
 
@@ -281,8 +296,10 @@ export class Engine {
       // TODO: this will likely become a more nuanced state to handle multiple reflections off of multiple surfaces
       const needsUpdate = false;
 
+      const age = 0;
+
       // Add particle to global particle array
-      const particle = { handle, x, y, sphereBody, sphereMesh, needsUpdate }
+      const particle = { handle, x, y, age, sphereBody, sphereMesh, needsUpdate }
       this.particles.push(particle)
     }
   }
