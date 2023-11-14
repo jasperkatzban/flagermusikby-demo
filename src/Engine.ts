@@ -19,7 +19,7 @@ import * as Stats from 'stats.js';
 
 import { EventSource, ResourcePool } from './lib';
 
-import { Wavefront } from './lib';
+import { Wavefront, Map } from './lib';
 
 import toonVertexShader from './shaders/toon.vert?raw'
 import toonFragmentShader from './shaders/toon.frag?raw'
@@ -47,6 +47,7 @@ export class Engine {
   private frameId: number | null = null;
   private clock = new Clock();
 
+  public map: Map | undefined;
   public wavefronts: { [key: string]: Wavefront } = {};
   public maxWavefrontAge: number = 512;
 
@@ -74,6 +75,8 @@ export class Engine {
 
     this.sunlight = this.createSunlight();
     this.renderer = this.createRenderer();
+
+    this.map = undefined;
 
     this.cursorPos = new Vector3(0, 0, 0);
 
@@ -117,9 +120,8 @@ export class Engine {
     this.cursorMesh = new Mesh(cursorGeometry, cursorMaterial);
     this.scene.add(this.cursorMesh)
 
-
     // Add world map
-    this.addMap();
+    this.map = new Map(this.rapier, this.physicsWorld, this.scene);
 
     if (!this.frameId) {
       this.clock.start();
@@ -147,10 +149,14 @@ export class Engine {
 
     // Check for collision events
     this.eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
+      this.map?.checkCollisionEvents(handle1, handle2);
       for (const [key, wavefront] of Object.entries(this.wavefronts)) {
         wavefront.checkCollisionEvents(handle1, handle2);
       }
     });
+
+    // Update environment and wavefronts
+    this.map?.update()
 
     for (const [key, wavefront] of Object.entries(this.wavefronts)) {
       wavefront.update();
@@ -174,30 +180,7 @@ export class Engine {
     this.wavefronts[this.time.toString()] = wavefront
   }
 
-  public addMap() {
-    // Create wall rigid body
-    const rbDescWall = this.rapier.RigidBodyDesc.kinematicPositionBased()
-      .setTranslation(0, 10)
-      .setCcdEnabled(true);
-    const wallBody = this.physicsWorld!.createRigidBody(rbDescWall);
 
-    // Create wall collider
-    const clDescWall = this.rapier.ColliderDesc.cuboid(20, .5)
-      .setFriction(0.0)
-      .setFrictionCombineRule(this.rapier.CoefficientCombineRule.Max)
-      .setRestitution(1.0)
-      .setCollisionGroups(0x00020001)
-      .setRestitutionCombineRule(this.rapier.CoefficientCombineRule.Max)
-      .setActiveEvents(this.rapier.ActiveEvents.COLLISION_EVENTS);
-    this.physicsWorld!.createCollider(clDescWall, wallBody);
-
-    // Create rendered wall
-    const material = new MeshStandardMaterial({ color: 0xffff00 });
-    const geometry = new BoxGeometry(40, 1);
-    const wallMesh = new Mesh(geometry, material);
-    wallMesh.position.set(0, 10, 0);
-    this.scene.add(wallMesh)
-  }
 
   /** Return the elapsed running time. */
   public get time(): number {
