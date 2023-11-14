@@ -182,12 +182,13 @@ export class Wavefront {
             point.sphereMesh.scale.set(scale.x + scaleDecayCoeff, scale.y + scaleDecayCoeff, scale.z + scaleDecayCoeff);
 
             // Update point color in renderer
-            const colorDecayCoeff = 1.0 / 400;
+            const colorDecayCoeff = 1.0 / 150;
+            const flicker = Math.sin(this.age * .2 + 3 * Math.random()) * .01;
             const color = point.sphereMesh.material.uniforms.color.value;
             point.sphereMesh.material.uniforms.color.value = new Vector4(
-                color.x - colorDecayCoeff,
-                color.y - colorDecayCoeff,
-                color.z - colorDecayCoeff,
+                color.x - colorDecayCoeff + flicker,
+                color.y - colorDecayCoeff + flicker,
+                color.z - colorDecayCoeff + flicker,
                 color.w
             );
 
