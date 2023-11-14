@@ -13,33 +13,21 @@ import {
   WebGLRenderer,
   ShaderMaterial,
   AudioListener,
-  PositionalAudio,
-  AudioLoader
 } from 'three';
 import { getRapier, Rapier } from './physics/rapier';
+import * as Stats from 'stats.js';
+
 import { EventSource, ResourcePool } from './lib';
+
+import { Wavefront } from './lib';
+
 import toonVertexShader from './shaders/toon.vert?raw'
 import toonFragmentShader from './shaders/toon.frag?raw'
-
-import chirp from './sounds/chirp-placeholder.wav'
-
-import * as Stats from 'stats.js';
 
 // Set up FPS stats
 const stats = new Stats()
 stats.showPanel(0)
 document.body.appendChild(stats.dom)
-
-// TODO: make this a dedicated class
-type Particle = {
-  handle: number,
-  x: number,
-  y: number,
-  age: number,
-  sphereBody: RigidBody,
-  sphereMesh: THREE.Mesh,
-  needsUpdate: boolean
-}
 
 /** Contains the three.js renderer and handles to important resources. */
 export class Engine {
@@ -59,6 +47,9 @@ export class Engine {
   private frameId: number | null = null;
   private clock = new Clock();
 
+  public wavefronts: { [key: string]: Wavefront } = {};
+  public maxWavefrontAge: number = 512;
+
   // Renderer setup
   private frustumSize = 50;
   private aspect = window.innerWidth / window.innerHeight;
@@ -66,29 +57,10 @@ export class Engine {
   private cursorMesh?: Mesh;
   private cursorPos: Vector3;
 
-  // Objects setup
-  private numParticles: number;
-  private particleSize: number;
-  private particleVelocity: number;
-  private particleJitter: number;
-  private particleSpawnDistance: number;
-  private maxParticleAge: number;
-  private particles: Array<Particle>
-
   // Audio Setup
   private listener: AudioListener;
-  private sound: PositionalAudio;
 
   constructor() {
-    // Constants for physics engine
-    this.numParticles = 128;
-    this.particleSize = .1;
-    this.particleVelocity = 10;
-    this.particleJitter = 1.0;
-    this.particleSpawnDistance = 0;
-    this.maxParticleAge = 400;
-    this.particles = [];
-
     // Set up renderer scene
     this.animate = this.animate.bind(this);
     this.camera = new OrthographicCamera(
@@ -108,9 +80,6 @@ export class Engine {
     // Set up audio listener
     this.listener = new AudioListener();
     this.camera.add(this.listener);
-
-    // create the PositionalAudio object (passing in the listener)
-    this.sound = new PositionalAudio(this.listener);
   }
 
   /** Shut down the renderer and release all resources. */
@@ -149,16 +118,6 @@ export class Engine {
     this.scene.add(this.cursorMesh)
 
 
-
-    // load a sound and set it as the PositionalAudio object's buffer
-    const audioLoader = new AudioLoader();
-    let sound = this.sound;
-    audioLoader.load(chirp, function (buffer) {
-      sound.setBuffer(buffer);
-      sound.setRefDistance(200);
-    });
-    this.cursorMesh.add(this.sound);
-
     // Add world map
     this.addMap();
 
@@ -187,60 +146,19 @@ export class Engine {
     this.physicsWorld?.step(this.eventQueue);
 
     // Check for collision events
-    // TODO: specify type of collision based on type of material contacted
     this.eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
-      this.particles.forEach((particle) => {
-        if (particle.handle == handle1 || particle.handle == handle2) {
-          particle.needsUpdate = true;
-        }
-      })
+      for (const [key, wavefront] of Object.entries(this.wavefronts)) {
+        wavefront.checkCollisionEvents(handle1, handle2);
+      }
     });
 
-    // Update rendered wavefront positions
-    this.particles.forEach((particle) => {
-      // If particle is passed lifecycle, remove it from world
-      if (particle.age > this.maxParticleAge) {
-        // TODO: remove from physics world too
-        // this.physicsWorld.removeRigidBody(particle.sphereBody);
-        this.scene.remove(particle.sphereMesh);
-        return;
+    for (const [key, wavefront] of Object.entries(this.wavefronts)) {
+      wavefront.update();
+      if (wavefront.age > this.maxWavefrontAge) {
+        wavefront.remove();
+        delete this.wavefronts[key];
       }
-
-      // Update particle position in renderer
-      const position = particle.sphereBody!.translation();
-      particle.sphereMesh.position.set(position.x, position.y, 0);
-
-      // Update particle scale in renderer
-      const scaleDecayCoeff = .01;
-      const scale = particle.sphereMesh.scale
-      particle.sphereMesh.scale.set(scale.x + scaleDecayCoeff, scale.y + scaleDecayCoeff, scale.z + scaleDecayCoeff);
-
-      // Update particle color in renderer
-      const colorDecayCoeff = 1.0 / this.maxParticleAge;
-      const color = particle.sphereMesh.material.uniforms.color.value;
-      particle.sphereMesh.material.uniforms.color.value = new Vector4(
-        color.x - colorDecayCoeff,
-        color.y - colorDecayCoeff,
-        color.z - colorDecayCoeff,
-        color.w
-      );
-
-      // Update particle if it has collided;
-      if (particle.needsUpdate) {
-        // Update color in renderer
-        particle.sphereMesh.material.uniforms.color.value = new Vector4(color.x, color.y, color.z + .5, color.w);
-
-        // Update velocity
-        let linVel = particle.sphereBody.linvel();
-        let newX = linVel.x + this.particleJitter * (Math.random() - .5)
-        let newY = linVel.y + this.particleJitter * (Math.random() - .5)
-        particle.sphereBody.setLinvel(new this.rapier.Vector2(newX, newY), true);
-
-        particle.needsUpdate = false;
-      }
-
-      particle.age += 1;
-    })
+    }
   }
 
   public updateCursorPos(mouse: { x: number, y: number }) {
@@ -252,8 +170,8 @@ export class Engine {
   }
 
   public fireClickEvent() {
-    this.spawnWavefront(this.cursorPos);
-    this.sound.play();
+    const wavefront = new Wavefront(this.rapier, this.physicsWorld, this.scene, this.listener, this.cursorPos);
+    this.wavefronts[this.time.toString()] = wavefront
   }
 
   public addMap() {
@@ -279,64 +197,6 @@ export class Engine {
     const wallMesh = new Mesh(geometry, material);
     wallMesh.position.set(0, 10, 0);
     this.scene.add(wallMesh)
-  }
-
-  public spawnWavefront(pos: Vector3) {
-    const angleJitter = Math.random();
-    // Create particles in wavefront in a circular arrangement
-    for (let i = 0; i < this.numParticles; i++) {
-      // Calculate initial position and velocity of particles
-      const angle = (i / this.numParticles) * Math.PI * 2 + angleJitter;
-
-      const x = pos.x + this.particleSpawnDistance * Math.sin(angle);
-      const y = pos.y + this.particleSpawnDistance * Math.cos(angle);
-
-      const xVel = this.particleVelocity * Math.sin(angle)
-      const yVel = this.particleVelocity * Math.cos(angle)
-
-      // Create physics simulation particle
-      const rbDesc = this.rapier.RigidBodyDesc.dynamic()
-        .setTranslation(x, y)
-        .setLinvel(xVel, yVel)
-        .setCcdEnabled(true);
-      const sphereBody = this.physicsWorld!.createRigidBody(rbDesc);
-
-      // Create collider for particle
-      const clDesc = this.rapier.ColliderDesc.ball(this.particleSize)
-        .setFriction(0.0)
-        .setFrictionCombineRule(this.rapier.CoefficientCombineRule.Max)
-        .setRestitution(1.0)
-        .setRestitutionCombineRule(this.rapier.CoefficientCombineRule.Max)
-        .setCollisionGroups(0x00010002)
-        .setActiveEvents(this.rapier.ActiveEvents.COLLISION_EVENTS)
-      this.physicsWorld!.createCollider(clDesc, sphereBody);
-
-      // Capture unique identifier for particle body
-      const handle = sphereBody.handle;
-
-      // Create rendered particle
-      const particleMaterial = new ShaderMaterial({
-        uniforms: {
-          color:
-            { value: new Vector4(1.0, 1.0, 1.0, 1.0) }
-        },
-        vertexShader: toonVertexShader,
-        fragmentShader: toonFragmentShader,
-      })
-      const geometry = new SphereGeometry(this.particleSize, 0, 5);
-      const sphereMesh = new Mesh(geometry, particleMaterial);
-      this.scene.add(sphereMesh)
-
-      // Flag for if particle has reflected
-      // TODO: this will likely become a more nuanced state to handle multiple reflections off of multiple surfaces
-      const needsUpdate = false;
-
-      const age = 0;
-
-      // Add particle to global particle array
-      const particle = { handle, x, y, age, sphereBody, sphereMesh, needsUpdate }
-      this.particles.push(particle)
-    }
   }
 
   /** Return the elapsed running time. */
