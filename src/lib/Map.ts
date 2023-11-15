@@ -26,51 +26,53 @@ export class Map {
         this.scene = scene;
 
         // Create a simple line of points representing a wall
-        for (let i = 0; i < 100; i++) {
-            const x = (i - 50) * .4 + Math.random() * .2;
-            const y = 10 + Math.random() * .2;
+        for (let i = 0; i < 2; i++) {
+            for (let j = 0; j < 100; j++) {
+                const x = (i - 1) * 20 + Math.random() * .2;
+                const y = (j - 50) * .4 + Math.random() * .2;
 
-            // Create physics simulation point
-            const rbDesc = rapier.RigidBodyDesc.kinematicPositionBased()
-                .setTranslation(x, y)
-                .setCcdEnabled(true);
-            const surfaceBody = physicsWorld!.createRigidBody(rbDesc);
+                // Create physics simulation point
+                const rbDesc = rapier.RigidBodyDesc.kinematicPositionBased()
+                    .setTranslation(x, y)
+                    .setCcdEnabled(true);
+                const surfaceBody = physicsWorld!.createRigidBody(rbDesc);
 
-            // Create collider for point
-            const clDesc = rapier.ColliderDesc.ball(this.pointSize)
-                .setFriction(0.0)
-                .setFrictionCombineRule(rapier.CoefficientCombineRule.Max)
-                .setRestitution(1.0)
-                .setRestitutionCombineRule(rapier.CoefficientCombineRule.Max)
-                .setCollisionGroups(0x00020001)
-                .setActiveEvents(rapier.ActiveEvents.COLLISION_EVENTS)
-            physicsWorld!.createCollider(clDesc, surfaceBody);
+                // Create collider for point
+                const clDesc = rapier.ColliderDesc.ball(this.pointSize)
+                    .setFriction(0.0)
+                    .setFrictionCombineRule(rapier.CoefficientCombineRule.Max)
+                    .setRestitution(1.0)
+                    .setRestitutionCombineRule(rapier.CoefficientCombineRule.Max)
+                    .setCollisionGroups(0x00020001)
+                    .setActiveEvents(rapier.ActiveEvents.COLLISION_EVENTS)
+                physicsWorld!.createCollider(clDesc, surfaceBody);
 
-            // Capture unique identifier for point body
-            const handle = surfaceBody.handle;
+                // Capture unique identifier for point body
+                const handle = surfaceBody.handle;
 
-            // Create rendered point
-            const pointMaterial = new ShaderMaterial({
-                uniforms: {
-                    color:
-                        { value: new Vector4(0.0, 0.0, 0.0, 1.0) }
-                },
-                vertexShader: toonVertexShader,
-                fragmentShader: toonFragmentShader,
-            })
+                // Create rendered point
+                const pointMaterial = new ShaderMaterial({
+                    uniforms: {
+                        color:
+                            { value: new Vector4(1.0, 0.0, 0.0, 1.0) }
+                    },
+                    vertexShader: toonVertexShader,
+                    fragmentShader: toonFragmentShader,
+                })
 
-            const geometry = new SphereGeometry(this.pointSize, 0, 5);
-            const surfaceMesh = new Mesh(geometry, pointMaterial);
-            surfaceMesh.position.set(x, y, 0)
-            this.scene.add(surfaceMesh)
+                const geometry = new SphereGeometry(this.pointSize, 0, 5);
+                const surfaceMesh = new Mesh(geometry, pointMaterial);
+                surfaceMesh.position.set(x, y, 0)
+                this.scene.add(surfaceMesh)
 
-            // Flag for if point has reflected
-            // TODO: this will likely become a more nuanced state to handle multiple reflections off of multiple surfaces
-            const needsUpdate = false;
+                // Flag for if point has reflected
+                // TODO: this will likely become a more nuanced state to handle multiple reflections off of multiple surfaces
+                const needsUpdate = false;
 
-            // Add point to global point array
-            const point = new SurfacePoint(handle, x, y, surfaceBody, surfaceMesh, needsUpdate)
-            this.points.push(point)
+                // Add point to global point array
+                const point = new SurfacePoint(handle, x, y, surfaceBody, surfaceMesh, needsUpdate)
+                this.points.push(point)
+            }
         }
     }
 
