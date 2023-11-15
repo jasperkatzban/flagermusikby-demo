@@ -1,10 +1,8 @@
 import {
-  BoxGeometry,
   Clock,
   Color,
   DirectionalLight,
   Mesh,
-  MeshStandardMaterial,
   OrthographicCamera,
   Scene,
   SphereGeometry,
@@ -13,6 +11,7 @@ import {
   WebGLRenderer,
   ShaderMaterial,
   AudioListener,
+  Vector2,
 } from 'three';
 import { getRapier, Rapier } from './physics/rapier';
 import * as Stats from 'stats.js';
@@ -23,6 +22,7 @@ import { Wavefront, Map } from './lib';
 
 import toonVertexShader from './shaders/toon.vert?raw'
 import toonFragmentShader from './shaders/toon.frag?raw'
+import { defineConfig } from 'vite';
 
 // Set up FPS stats
 const stats = new Stats()
@@ -57,6 +57,9 @@ export class Engine {
   private sunlight: DirectionalLight;
   private cursorMesh?: Mesh;
   private cursorPos: Vector3;
+
+  private viewOffset = new Vector2(0, 0);
+  public mousePos = new Vector2(0, 0);
 
   // Audio Setup
   private listener: AudioListener;
@@ -165,13 +168,29 @@ export class Engine {
         delete this.wavefronts[key];
       }
     }
+
+    // Update camera and cursor positions
+    this.updateCameraPos();
   }
 
-  public updateCursorPos(mouse: { x: number, y: number }) {
-    // Make the cursor follow the mouse
-    let zoomFactor = .5 / this.camera.zoom * this.frustumSize;
-    this.cursorPos = new Vector3(mouse.x * this.aspect * zoomFactor, mouse.y * zoomFactor, 0.0);
+  public updateNavigation(mouse: { x: number, y: number }) {
+    this.mousePos.set(mouse.x, mouse.y);
+  }
 
+  public updateCameraPos() {
+    // Make the camera follow the cursor with damping
+    const mousePosWorld = new Vector2(this.mousePos.x * window.innerWidth / 2, this.mousePos.y * window.innerHeight / 2);
+
+    const diff = mousePosWorld.add(this.viewOffset.clone().negate())
+    this.viewOffset.add(diff.multiplyScalar(.01));
+
+    this.camera.setViewOffset(window.innerWidth, window.innerHeight, this.viewOffset.x, -this.viewOffset.y, window.innerWidth, window.innerHeight)
+    this.camera.updateProjectionMatrix();
+
+    // Move the game cursor and offset its position to account for damping
+    let zoomFactor = .5 / this.camera.zoom * this.frustumSize;
+    console.log(window.innerWidth)
+    this.cursorPos = new Vector3((this.mousePos.x * this.aspect + this.viewOffset.x / 395) * zoomFactor, (this.mousePos.y + this.viewOffset.y / 395) * zoomFactor, 0.0);
     this.cursorMesh?.position.copy(this.cursorPos);
   }
 
@@ -179,8 +198,6 @@ export class Engine {
     const wavefront = new Wavefront(this.rapier, this.physicsWorld, this.scene, this.listener, this.cursorPos);
     this.wavefronts[this.time.toString()] = wavefront
   }
-
-
 
   /** Return the elapsed running time. */
   public get time(): number {

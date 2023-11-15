@@ -1,4 +1,5 @@
 import './index.css';
+import { MOUSE } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { Engine } from './Engine';
 
@@ -15,10 +16,7 @@ export function createApp() {
   orbitControls.enableRotate = false;
   orbitControls.dampingFactor = 0.05;
   orbitControls.screenSpacePanning = false;
-  orbitControls.minDistance = 20;
-  orbitControls.maxDistance = 100;
-  orbitControls.maxPolarAngle = Math.PI / 2;
-  // orbitControls.zoomToCursor = true;
+  orbitControls.zoomToCursor = false;
 
   orbitControls.update();
   engine.update.subscribe('update', () => {
