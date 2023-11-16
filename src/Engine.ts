@@ -48,7 +48,6 @@ export class Engine {
 
   public map: Map | undefined;
   public wavefronts: { [key: string]: Wavefront } = {};
-  public maxWavefrontAge: number = 512;
 
   // Renderer setup
   private frustumSize = 50;
@@ -162,7 +161,7 @@ export class Engine {
 
     for (const [key, wavefront] of Object.entries(this.wavefronts)) {
       wavefront.update();
-      if (wavefront.age > this.maxWavefrontAge) {
+      if (wavefront.age > wavefront.lifespan) {
         wavefront.remove();
         delete this.wavefronts[key];
       }
@@ -197,7 +196,8 @@ export class Engine {
   }
 
   public fireClickEvent() {
-    const wavefront = new Wavefront(this.rapier, this.physicsWorld, this.scene, this.listener, this.cursorPos);
+    const lifespan = 5;
+    const wavefront = new Wavefront(lifespan, this.rapier, this.physicsWorld, this.scene, this.listener, this.cursorPos);
     this.wavefronts[this.time.toString()] = wavefront
   }
 
