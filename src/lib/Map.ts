@@ -13,12 +13,11 @@ export class Map {
     rapier!: Rapier;
     physicsWorld?: World;
     scene: Scene;
-    pointSize: number = .2;
     points: Array<SurfacePoint> = []
 
     constructor(
-        rapier: any,
-        physicsWorld: any,
+        rapier: Rapier,
+        physicsWorld: World,
         scene: Scene,
     ) {
         this.rapier = rapier;
@@ -27,75 +26,24 @@ export class Map {
 
         // Create a simple line of points representing a wall
         for (let i = 0; i < 2; i++) {
-            for (let j = 0; j < 100; j++) {
+            for (let j = 0; j < 400; j++) {
                 const x = (i - 1) * 20 + Math.random() * .2;
-                const y = (j - 50) * .4 + Math.random() * .2;
-
-                // Create physics simulation point
-                const rbDesc = rapier.RigidBodyDesc.kinematicPositionBased()
-                    .setTranslation(x, y)
-                    .setCcdEnabled(true);
-                const surfaceBody = physicsWorld!.createRigidBody(rbDesc);
-
-                // Create collider for point
-                const clDesc = rapier.ColliderDesc.ball(this.pointSize)
-                    .setFriction(0.0)
-                    .setFrictionCombineRule(rapier.CoefficientCombineRule.Max)
-                    .setRestitution(1.0)
-                    .setRestitutionCombineRule(rapier.CoefficientCombineRule.Max)
-                    .setCollisionGroups(0x00020001)
-                    .setActiveEvents(rapier.ActiveEvents.COLLISION_EVENTS)
-                physicsWorld!.createCollider(clDesc, surfaceBody);
-
-                // Capture unique identifier for point body
-                const handle = surfaceBody.handle;
-
-                // Create rendered point
-                const pointMaterial = new ShaderMaterial({
-                    uniforms: {
-                        color:
-                            { value: new Vector4(1.0, 0.0, 0.0, 1.0) }
-                    },
-                    vertexShader: toonVertexShader,
-                    fragmentShader: toonFragmentShader,
-                })
-
-                const geometry = new SphereGeometry(this.pointSize, 0, 5);
-                const surfaceMesh = new Mesh(geometry, pointMaterial);
-                surfaceMesh.position.set(x, y, 0)
-                this.scene.add(surfaceMesh)
+                const y = (j - 200) * .4 + Math.random() * .2;
 
                 // Flag for if point has reflected
                 // TODO: this will likely become a more nuanced state to handle multiple reflections off of multiple surfaces
-                const needsUpdate = false;
 
                 // Add point to global point array
-                const point = new SurfacePoint(handle, x, y, surfaceBody, surfaceMesh, needsUpdate)
+                const point = new SurfacePoint(x, y)
+                point.attach(this.rapier, this.physicsWorld, this.scene)
                 this.points.push(point)
             }
         }
     }
 
     public update() {
-        // Update rendered wavefront positions
         this.points.forEach((point) => {
-            // Update point color in renderer
-            const colorDecayCoeff = 1.0 / 1000;
-            const color = point.surfaceMesh.material.uniforms.color.value;
-            point.surfaceMesh.material.uniforms.color.value = new Vector4(
-                Math.max(color.x - colorDecayCoeff, 0),
-                Math.max(color.y - colorDecayCoeff, 0),
-                Math.max(color.z - colorDecayCoeff, 0),
-                color.w
-            );
-
-            // Update point if it has collided;
-            if (point.needsUpdate) {
-                // Update color in renderer
-                point.surfaceMesh.material.uniforms.color.value = new Vector4(1.0, 1.0, 1.0, color.w);
-
-                point.needsUpdate = false;
-            }
+            point.update()
         })
     }
 
@@ -113,16 +61,69 @@ class SurfacePoint {
     public handle: number;
     public x: number;
     public y: number;
+    public pointSize: number;
     public surfaceBody: RigidBody;
     public surfaceMesh: Mesh;
-    public needsUpdate: boolean;
+    public needsUpdate: boolean = false;
 
-    constructor(handle: number, x: number, y: number, surfaceBody: RigidBody, surfaceMesh: Mesh, needsUpdate: boolean) {
-        this.handle = handle;
+    constructor(x: number, y: number, pointSize: number = .2) {
         this.x = x;
         this.y = y;
-        this.surfaceBody = surfaceBody;
-        this.surfaceMesh = surfaceMesh;
-        this.needsUpdate = needsUpdate;
+        this.pointSize = pointSize;
+    }
+
+    public attach(rapier: Rapier, physicsWorld: World, scene: Scene) {
+        // Create physics simulation point
+        const rbDesc = rapier.RigidBodyDesc.kinematicPositionBased()
+            .setTranslation(this.x, this.y)
+            .setCcdEnabled(true);
+        this.surfaceBody = physicsWorld!.createRigidBody(rbDesc);
+
+        // Create collider for point
+        const clDesc = rapier.ColliderDesc.ball(this.pointSize)
+            .setFriction(0.0)
+            .setFrictionCombineRule(rapier.CoefficientCombineRule.Max)
+            .setRestitution(1.0)
+            .setRestitutionCombineRule(rapier.CoefficientCombineRule.Max)
+            .setCollisionGroups(0x00020001)
+            .setActiveEvents(rapier.ActiveEvents.COLLISION_EVENTS)
+        physicsWorld!.createCollider(clDesc, this.surfaceBody);
+
+        // Capture unique identifier for point body
+        this.handle = this.surfaceBody.handle;
+
+        // Create rendered point
+        const pointMaterial = new ShaderMaterial({
+            uniforms: {
+                color:
+                    { value: new Vector4(0.0, 0.0, 0.0, 1.0) }
+            },
+            vertexShader: toonVertexShader,
+            fragmentShader: toonFragmentShader,
+        })
+
+        const geometry = new SphereGeometry(this.pointSize, 0, 5);
+        this.surfaceMesh = new Mesh(geometry, pointMaterial);
+        this.surfaceMesh.position.set(this.x, this.y, 0)
+        scene.add(this.surfaceMesh)
+    }
+
+    public update() {
+        // Update point color in renderer
+        const colorDecayCoeff = 1.0 / 1000;
+        const color = this.surfaceMesh.material.uniforms.color.value;
+        this.surfaceMesh.material.uniforms.color.value = new Vector4(
+            Math.max(color.x - colorDecayCoeff, 0),
+            Math.max(color.y - colorDecayCoeff, 0),
+            Math.max(color.z - colorDecayCoeff, 0),
+            color.w
+        );
+
+        // Update point if it has collided;
+        if (this.needsUpdate) {
+            // Update color in renderer
+            this.surfaceMesh.material.uniforms.color.value = new Vector4(1.0, 1.0, 1.0, color.w);
+            this.needsUpdate = false;
+        }
     }
 }

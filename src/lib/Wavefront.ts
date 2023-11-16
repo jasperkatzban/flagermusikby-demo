@@ -18,10 +18,6 @@ import chirp from '../sounds/chirp-placeholder.wav'
 import chirpReverb from '../sounds/chirp-placeholder-reverb.wav'
 
 export class Wavefront {
-    rapier!: Rapier;
-    physicsWorld?: World;
-    scene: Scene;
-    listener: AudioListener;
     position: Vector3;
     numPoints: number;
     pointSize: number;
@@ -33,16 +29,13 @@ export class Wavefront {
     lifespan: number;
     clock: Clock;
 
+    centerMesh: Mesh;
     points: Array<WavefrontPoint> = []
-    initialSound: PositionalAudio;
+    initialSound: PositionalAudio | undefined;
     playbackRate: number;
 
     constructor(
         lifespan: number,
-        rapier: any,
-        physicsWorld: any,
-        scene: Scene,
-        listener: AudioListener,
         position: Vector3,
         numPoints: number = 64,
         pointSize: number = .2,
@@ -51,10 +44,6 @@ export class Wavefront {
         angleJitter: number = 1.0,
         pointSpawnDistance: number = 0,
     ) {
-        this.rapier = rapier;
-        this.physicsWorld = physicsWorld;
-        this.scene = scene;
-        this.listener = listener;
         this.position = position;
         this.numPoints = numPoints;
         this.pointSize = pointSize;
@@ -67,6 +56,7 @@ export class Wavefront {
         const angleOffset = angleJitter * Math.random()
 
         this.playbackRate = 1 + (Math.random() * .5);
+        this.initialSound = undefined;
 
         this.age = 0
 
@@ -90,12 +80,8 @@ export class Wavefront {
 
             // Add point to point array
             const point = new WavefrontPoint(x, y, xVel, yVel, pointSize, jitter, lifespan, soundID);
-            point.attach(this.rapier, this.physicsWorld, this.scene, this.listener)
             this.points.push(point)
         }
-
-        // Create the PositionalAudio object (passing in the listener)
-        this.initialSound = new PositionalAudio(this.listener);
 
         // Create an empty object to attach the emitted sound from
         const centerMaterial = new ShaderMaterial({
@@ -108,16 +94,26 @@ export class Wavefront {
         })
 
         const geometry = new SphereGeometry(0, 0, 5);
-        const centerMesh = new Mesh(geometry, centerMaterial);
-        centerMesh.position.set(position.x, position.y, position.z);
-        this.scene.add(centerMesh);
-        centerMesh.add(this.initialSound);
+        this.centerMesh = new Mesh(geometry, centerMaterial);
+        this.centerMesh.position.set(position.x, position.y, position.z);
 
         // Play initial sound when wavefront is spawned
         this.playInitialSound();
 
         this.clock = new Clock();
         this.clock.start();
+    }
+
+    public attach(rapier: Rapier, physicsWorld: World, scene: Scene, listener: AudioListener) {
+        this.points.forEach(point => {
+            point.attach(rapier, physicsWorld, scene, listener)
+        })
+
+        // Create the PositionalAudio object (passing in the listener)
+        this.initialSound = new PositionalAudio(listener);
+        this.centerMesh.add(this.initialSound);
+
+        scene.add(this.centerMesh);
     }
 
     private playInitialSound() {
@@ -127,10 +123,10 @@ export class Wavefront {
         const playbackRate = this.playbackRate
 
         audioLoader.load(chirp, function (buffer) {
-            sound.setBuffer(buffer);
-            sound.setRefDistance(20);
-            sound.setPlaybackRate(playbackRate);
-            sound.play();
+            sound!.setBuffer(buffer);
+            sound!.setRefDistance(20);
+            sound!.setPlaybackRate(playbackRate);
+            sound!.play();
         });
     }
 
@@ -154,11 +150,11 @@ export class Wavefront {
         })
     }
 
-    public remove() {
+    public remove(scene: Scene, physicsWorld: World) {
         // If point is passed lifecycle, remove it from world
         this.points.forEach((point) => {
-            this.scene.remove(point.sphereMesh);
-            this.physicsWorld.removeRigidBody(point.sphereBody);
+            scene.remove(point.sphereMesh);
+            physicsWorld.removeRigidBody(point.sphereBody);
         })
     }
 }

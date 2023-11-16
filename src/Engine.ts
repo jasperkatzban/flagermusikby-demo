@@ -162,7 +162,7 @@ export class Engine {
     for (const [key, wavefront] of Object.entries(this.wavefronts)) {
       wavefront.update();
       if (wavefront.age > wavefront.lifespan) {
-        wavefront.remove();
+        wavefront.remove(this.scene, this.physicsWorld);
         delete this.wavefronts[key];
       }
     }
@@ -197,7 +197,8 @@ export class Engine {
 
   public fireClickEvent() {
     const lifespan = 5;
-    const wavefront = new Wavefront(lifespan, this.rapier, this.physicsWorld, this.scene, this.listener, this.cursorPos);
+    const wavefront = new Wavefront(lifespan, this.cursorPos);
+    wavefront.attach(this.rapier, this.physicsWorld, this.scene, this.listener);
     this.wavefronts[this.time.toString()] = wavefront
   }
 
