@@ -22,7 +22,6 @@ import { Wavefront, Map } from './lib';
 
 import toonVertexShader from './shaders/toon.vert?raw'
 import toonFragmentShader from './shaders/toon.frag?raw'
-import { defineConfig } from 'vite';
 
 // Set up FPS stats
 const stats = new Stats()
@@ -179,18 +178,21 @@ export class Engine {
 
   public updateCameraPos() {
     // Make the camera follow the cursor with damping
-    const mousePosWorld = new Vector2(this.mousePos.x * window.innerWidth / 2, this.mousePos.y * window.innerHeight / 2);
+    const acceleration = this.mousePos.length() ** 4;
+    const normal = this.mousePos.clone().normalize().multiplyScalar(acceleration * 10)
+    this.viewOffset.add(normal);
 
-    const diff = mousePosWorld.add(this.viewOffset.clone().negate())
-    this.viewOffset.add(diff.multiplyScalar(.01));
+    // Add a subtle pan depending on where the cursor is
+    const mousePosWorld = new Vector2(this.mousePos.x * window.innerWidth / 8, this.mousePos.y * window.innerHeight / 8);
+    const swayOffset = mousePosWorld.add(this.viewOffset.clone().negate()).multiplyScalar(.1);
 
-    this.camera.setViewOffset(window.innerWidth, window.innerHeight, this.viewOffset.x, -this.viewOffset.y, window.innerWidth, window.innerHeight)
+    // Adjust camera offset to simulate panning
+    this.camera.setViewOffset(window.innerWidth, window.innerHeight, this.viewOffset.x + swayOffset.x, -this.viewOffset.y - swayOffset.y, window.innerWidth, window.innerHeight)
     this.camera.updateProjectionMatrix();
 
     // Move the game cursor and offset its position to account for damping
     let zoomFactor = .5 / this.camera.zoom * this.frustumSize;
-    console.log(window.innerWidth)
-    this.cursorPos = new Vector3((this.mousePos.x * this.aspect + this.viewOffset.x / 395) * zoomFactor, (this.mousePos.y + this.viewOffset.y / 395) * zoomFactor, 0.0);
+    this.cursorPos = new Vector3((this.mousePos.x * this.aspect + (this.viewOffset.x + swayOffset.x) / 395) * zoomFactor, (this.mousePos.y + (this.viewOffset.y + swayOffset.y) / 395) * zoomFactor, 0.0);
     this.cursorMesh?.position.copy(this.cursorPos);
   }
 
