@@ -97,9 +97,6 @@ export class Wavefront {
         this.centerMesh = new Mesh(geometry, centerMaterial);
         this.centerMesh.position.set(position.x, position.y, position.z);
 
-        // Play initial sound when wavefront is spawned
-        this.playInitialSound();
-
         this.clock = new Clock();
         this.clock.start();
     }
@@ -114,6 +111,9 @@ export class Wavefront {
         this.centerMesh.add(this.initialSound);
 
         scene.add(this.centerMesh);
+
+        // Play initial sound when wavefront is spawned
+        this.playInitialSound();
     }
 
     private playInitialSound() {
