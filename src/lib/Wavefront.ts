@@ -273,7 +273,9 @@ class WavefrontPoint {
                     sound.setRefDistance(20);
                     sound.setPlaybackRate(1 + (Math.random() * .2));
                     sound.setVolume(volume);
-                    sound.play();
+                    if (!sound.isPlaying) {
+                        sound.play();
+                    }
                 });
             }
             // Handle other states here
