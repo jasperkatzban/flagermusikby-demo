@@ -1,7 +1,5 @@
 import {
   Clock,
-  Color,
-  DirectionalLight,
   Mesh,
   OrthographicCamera,
   Scene,
@@ -52,7 +50,6 @@ export class Engine {
   // Renderer setup
   private frustumSize = 50;
   private aspect = window.innerWidth / window.innerHeight;
-  private sunlight: DirectionalLight;
   private cursorMesh?: Mesh;
   private cursorPos: Vector3;
 
@@ -74,7 +71,6 @@ export class Engine {
     this.camera.position.set(0, 0, 1);
     this.camera.updateMatrixWorld();
 
-    this.sunlight = this.createSunlight();
     this.renderer = this.createRenderer();
 
     this.map = undefined;
@@ -239,21 +235,5 @@ export class Engine {
     renderer.autoClearDepth = true;
     renderer.autoClearStencil = false;
     return renderer;
-  }
-
-  private createSunlight() {
-    const sunlight = new DirectionalLight(new Color('#ffffff').convertSRGBToLinear(), 0.4);
-    sunlight.position.set(0, 1, 1);
-    sunlight.castShadow = true;
-    sunlight.shadow.mapSize.width = 1024;
-    sunlight.shadow.mapSize.height = 1024;
-    sunlight.shadow.camera.near = 1;
-    sunlight.shadow.camera.far = 32;
-    sunlight.shadow.camera.left = -15;
-    sunlight.shadow.camera.right = 15;
-    sunlight.shadow.camera.top = 15;
-    sunlight.shadow.camera.bottom = -15;
-    this.scene.add(sunlight);
-    return sunlight;
   }
 }
