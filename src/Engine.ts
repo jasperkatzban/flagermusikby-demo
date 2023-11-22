@@ -167,7 +167,7 @@ export class Engine {
     this.updateCameraPos();
   }
 
-  public updateNavigation(mouse: { x: number, y: number }) {
+  public updateMousePos(mouse: { x: number, y: number }) {
     this.mousePos.set(mouse.x, mouse.y);
   }
 
@@ -185,9 +185,11 @@ export class Engine {
     this.camera.setViewOffset(window.innerWidth, window.innerHeight, this.viewOffset.x + swayOffset.x, -this.viewOffset.y - swayOffset.y, window.innerWidth, window.innerHeight)
     this.camera.updateProjectionMatrix();
 
-    // Move the game cursor and offset its position to account for damping
+    // Move the game cursor with linear interpolation and offset its position to account for damping
     let zoomFactor = .5 / this.camera.zoom * this.frustumSize;
-    this.cursorPos = new Vector3((this.mousePos.x * this.aspect + (this.viewOffset.x + swayOffset.x) / 395) * zoomFactor, (this.mousePos.y + (this.viewOffset.y + swayOffset.y) / 395) * zoomFactor, 0.0);
+    const targetCursorPos = new Vector3((this.mousePos.x * this.aspect + (this.viewOffset.x + swayOffset.x) / 395) * zoomFactor, (this.mousePos.y + (this.viewOffset.y + swayOffset.y) / 395) * zoomFactor, 0.0);
+    this.cursorPos.x = this.lerp(this.cursorPos.x, targetCursorPos.x, 0.15);
+    this.cursorPos.y = this.lerp(this.cursorPos.y, targetCursorPos.y, 0.15);
     this.cursorMesh?.position.copy(this.cursorPos);
   }
 
@@ -201,6 +203,10 @@ export class Engine {
   /** Return the elapsed running time. */
   public get time(): number {
     return this.clock.elapsedTime;
+  }
+
+  private lerp(start: number, end: number, amt: number) {
+    return (1 - amt) * start + amt * end
   }
 
   private animate() {
