@@ -197,7 +197,7 @@ class WavefrontPoint {
         this.sphereBody = physicsWorld!.createRigidBody(rbDesc);
 
         // Create collider for point
-        const clDesc = rapier.ColliderDesc.ball(this.pointSize)
+        const clDesc = rapier.ColliderDesc.cuboid(this.pointSize, this.pointSize)
             .setFriction(0.0)
             .setFrictionCombineRule(rapier.CoefficientCombineRule.Max)
             .setRestitution(1.0)

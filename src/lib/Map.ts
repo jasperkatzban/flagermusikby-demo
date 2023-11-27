@@ -8,14 +8,16 @@ import {
 } from "three";
 import { parse } from 'svg-parser';
 
-import mapSVG from '../map/map.svg?raw'
+import mapSVG from '../map/buildings.svg?raw'
+import treeCSV from '../map/municipal-trees-small.csv?raw'
 
 export class Map {
     rapier!: Rapier;
     physicsWorld?: World;
     scene: Scene;
     mapPoints: Array<MapPoint> = []
-    renderedMesh: InstancedMesh;
+    renderedBuildingMesh: InstancedMesh;
+    renderedTreeMesh: InstancedMesh;
 
     origin = { x: -120, y: 230 };
     pointsFillGap = 0.5;
@@ -31,6 +33,11 @@ export class Map {
         this.physicsWorld = physicsWorld;
         this.scene = scene;
 
+        this.buildBuildings();
+        this.buildTrees();
+    }
+
+    public buildBuildings() {
         // parse svg of city map to JSON
         console.log("Parsing SVG to JSON...")
         const parsedSvg = parse(mapSVG);
@@ -111,8 +118,8 @@ export class Map {
         const material = new MeshBasicMaterial({ color: 0xffffff });
         const count = coordinates.length;
 
-        this.renderedMesh = new InstancedMesh(geometry, material, count);
-        scene.add(this.renderedMesh);
+        this.renderedBuildingMesh = new InstancedMesh(geometry, material, count);
+        this.scene.add(this.renderedBuildingMesh);
 
         // create points
         const dummy = new Object3D();
@@ -126,18 +133,93 @@ export class Map {
             dummy.position.set(coordinate.x, coordinate.y, 0);
             dummy.rotation.z = Math.random() * Math.PI;
             dummy.updateMatrix();
-            this.renderedMesh.setMatrixAt(i, dummy.matrix);
+            this.renderedBuildingMesh.setMatrixAt(i, dummy.matrix);
         })
+    }
+
+    public buildTrees() {
+        const treesCoordinate = this.ingestCSV(treeCSV);
+        let treePoints: { x: number, y: number }[] = [];
+
+        treesCoordinate.forEach(tree => {
+            const singleTreePoints = this.buildSingleTreePoints(tree);
+            singleTreePoints.forEach((point: { x: number, y: number }) => {
+                treePoints.push(point);
+            })
+        })
+
+        const geometry = new CircleGeometry(.2, 5);
+        const material = new MeshBasicMaterial({ color: 0x00ff00 });
+        const count = treePoints.length;
+
+        this.renderedTreeMesh = new InstancedMesh(geometry, material, count);
+        this.scene.add(this.renderedTreeMesh);
+
+        // create points
+        const dummy = new Object3D();
+        treePoints.forEach((treePoint, i) => {
+            // create points for physics simulation
+            const newPoint = new MapPoint('tree', treePoint.x, treePoint.y);
+            newPoint.attach(this.rapier, this.physicsWorld);
+            this.mapPoints.push(newPoint);
+
+            // set positions of rendered points in instanced mesh
+            dummy.position.set(treePoint.x, treePoint.y, 0);
+            dummy.rotation.z = Math.random() * Math.PI;
+            dummy.updateMatrix();
+            this.renderedTreeMesh.setMatrixAt(i, dummy.matrix);
+        })
+    }
+
+    // Spiralized trees
+    private buildSingleTreePoints(tree: { id: string, age: number, height: number, x: number, y: number }) {
+        let points: { x: number, y: number }[] = [];
+        const maxAngle = 10;
+
+        let angle = 0;
+        let radius = .1;
+        while (angle < maxAngle) {
+            let x = tree.x + Math.sin(angle) * radius;
+            let y = tree.y + Math.cos(angle) * radius;
+            points.push({ x, y });
+            radius += .1;
+            angle += 1;
+        }
+        return points
+    }
+
+    private ingestCSV(csv: string) {
+        let lines = csv.split("\n");
+        let result = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            let tree: { id: string, age: number, height: number, x: number, y: number } = {};
+            let currentline = lines[i].split(",");
+
+            tree.id = currentline[0];
+            tree.age = 2023 - parseInt(currentline[1]);
+            tree.height = parseFloat(currentline[2].split(" ")[0]);
+
+            let coordinates = currentline[3].split("POINT (");
+            coordinates = coordinates[1].split(" ");
+            coordinates[1] = coordinates[1].split(")")[0];
+            tree.x = parseFloat(coordinates[0]) * 20000 - 249800;
+            tree.y = parseFloat(coordinates[1]) * 20000 - 1114100;
+
+            result.push(tree);
+        }
+
+        return result; //JSON
     }
 
     public update() {
         this.mapPoints.forEach((mapPoint, i) => {
-            this.updateRenderedMeshColor(i, mapPoint);
+            this.updaterenderedBuildingMeshColor(i, mapPoint);
         })
     }
 
     // TODO: set color based on object type too
-    public updateRenderedMeshColor(index: number, mapPoint: MapPoint) {
+    public updaterenderedBuildingMeshColor(index: number, mapPoint: MapPoint) {
         let color = new Color(0x0f1a2e);
 
         switch (mapPoint.state) {
@@ -146,10 +228,10 @@ export class Map {
                 break;
         }
 
-        this.renderedMesh.setColorAt(index, color);
+        this.renderedBuildingMesh.setColorAt(index, color);
 
-        if (this.renderedMesh.instanceColor) {
-            this.renderedMesh.instanceColor.needsUpdate = true;
+        if (this.renderedBuildingMesh.instanceColor) {
+            this.renderedBuildingMesh.instanceColor.needsUpdate = true;
         }
     }
 
