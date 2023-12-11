@@ -3,6 +3,7 @@ import {
   Mesh,
   OrthographicCamera,
   Scene,
+  AmbientLight,
   SphereGeometry,
   Vector3,
   Vector4,
@@ -11,6 +12,13 @@ import {
   AudioListener,
   Vector2,
 } from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { VignetteShader } from './shaders/vignette';
 import { getRapier, Rapier } from './physics/rapier';
 import * as Stats from 'stats.js';
 
@@ -31,6 +39,7 @@ export class Engine {
   public readonly scene = new Scene();
   public readonly camera: OrthographicCamera;
   public readonly renderer: WebGLRenderer;
+  public readonly composer: EffectComposer;
   public readonly pool = new ResourcePool();
   public readonly viewPosition = new Vector3();
   public viewAngle = 0;
@@ -50,8 +59,11 @@ export class Engine {
   // Renderer setup
   private frustumSize = 50;
   private aspect = window.innerWidth / window.innerHeight;
+
+  // Cursor setup
   private cursorMesh?: Mesh;
   private cursorPos: Vector3;
+  private cursorDisplacement: number = 0;
 
   private viewOffset = new Vector2(0, 0);
   public mousePos = new Vector2(0, 0);
@@ -72,6 +84,24 @@ export class Engine {
     this.camera.updateMatrixWorld();
 
     this.renderer = this.createRenderer();
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.setSize(window.innerWidth, window.innerHeight);
+
+    const renderPass = new RenderPass(this.scene, this.camera);
+    this.composer.addPass(renderPass);
+
+    const bloomPass = new UnrealBloomPass(new Vector2(window.innerWidth, window.innerHeight), .25, .5, 0.0);
+    this.composer.addPass(bloomPass);
+
+    let vignettePass = new ShaderPass(VignetteShader);
+    vignettePass.uniforms["resolution"].value = new Vector2(window.innerWidth, window.innerHeight);
+    this.composer.addPass(vignettePass);
+
+    const afterimagePass = new AfterimagePass(.35);
+    this.composer.addPass(afterimagePass);
+
+    const outputPass = new OutputPass();
+    this.composer.addPass(outputPass);
 
     this.map = undefined;
 
@@ -120,6 +150,9 @@ export class Engine {
     // Add world map
     this.map = new Map(this.rapier, this.physicsWorld, this.scene);
 
+    const ambientLight = new AmbientLight('white', 20.0);
+    this.scene.add(ambientLight);
+
     if (!this.frameId) {
       this.clock.start();
       this.frameId = requestAnimationFrame(this.animate);
@@ -157,7 +190,13 @@ export class Engine {
 
     for (const [key, wavefront] of Object.entries(this.wavefronts)) {
       wavefront.update();
-      if (wavefront.age > wavefront.lifespan) {
+      for (const [key, point] of Object.entries(wavefront.points)) {
+        if (point.age > wavefront.lifespan) {
+          point.remove(this.physicsWorld, this.scene);
+          delete wavefront.points[key];
+        }
+      }
+      if (wavefront.points.length == 0) {
         wavefront.remove(this.scene, this.physicsWorld);
         delete this.wavefronts[key];
       }
@@ -191,10 +230,18 @@ export class Engine {
     this.cursorPos.x = this.lerp(this.cursorPos.x, targetCursorPos.x, 0.15);
     this.cursorPos.y = this.lerp(this.cursorPos.y, targetCursorPos.y, 0.15);
     this.cursorMesh?.position.copy(this.cursorPos);
+
+    const cursorPosDelta = Math.sqrt((this.cursorPos.x - targetCursorPos.x) ** 2 + (this.cursorPos.y - targetCursorPos.y) ** 2);
+    this.cursorDisplacement += cursorPosDelta;
+    let cursorExpression = 1 + (.3 + cursorPosDelta * .02) * Math.sin(this.cursorDisplacement / 10);
+    cursorExpression = this.lerp(cursorExpression, .6, 0.15);
+    console.log(cursorExpression);
+
+    this.cursorMesh?.scale.set(cursorExpression, cursorExpression, cursorExpression);
   }
 
   public fireClickEvent() {
-    const lifespan = 5;
+    const lifespan = 1.5;
     const wavefront = new Wavefront(lifespan, this.cursorPos);
     wavefront.attach(this.rapier, this.physicsWorld, this.scene, this.listener);
     this.wavefronts[this.time.toString()] = wavefront
@@ -219,7 +266,7 @@ export class Engine {
 
   /** Render the scene. */
   public render() {
-    this.renderer.render(this.scene, this.camera);
+    this.composer.render();
   }
 
   /** Handle window resize event. */
@@ -229,6 +276,7 @@ export class Engine {
       const height = this.mount.clientHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(width, height);
+      this.renderer.setPixelRatio(window.devicePixelRatio);
       this.renderer.render(this.scene, this.camera);
     }
   }
@@ -243,3 +291,4 @@ export class Engine {
     return renderer;
   }
 }
+

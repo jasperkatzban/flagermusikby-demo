@@ -4,11 +4,13 @@ import {
     CircleGeometry,
     Object3D,
     MeshBasicMaterial,
-    Color
+    Color,
+    Clock
 } from "three";
 import { parse } from 'svg-parser';
 
-import mapSVG from '../map/buildings.svg?raw'
+import mapSVG from '../map/block.svg?raw'
+// import mapSVG from '../map/buildings.svg?raw'
 import treeCSV from '../map/municipal-trees-small.csv?raw'
 
 export class Map {
@@ -18,10 +20,13 @@ export class Map {
     mapPoints: Array<MapPoint> = []
     renderedBuildingMesh: InstancedMesh;
     renderedTreeMesh: InstancedMesh;
+    pointSize: number = .1;
+    clock: Clock = new Clock();
 
-    origin = { x: -120, y: 230 };
-    pointsFillGap = 0.5;
-    minPointDistance = 0.3;
+    // origin = { x: -120, y: 230 };
+    origin = { x: -57, y: 51 };
+    pointsFillGap = 0.1;
+    minPointDistance = 0.05;
     pointsJitter = 0.2;
 
     constructor(
@@ -34,7 +39,9 @@ export class Map {
         this.scene = scene;
 
         this.buildBuildings();
-        this.buildTrees();
+        // this.buildTrees();
+
+        this.clock.start();
     }
 
     public buildBuildings() {
@@ -114,7 +121,7 @@ export class Map {
         console.log("Done!")
 
         // TODO: set size and color based on object type
-        const geometry = new CircleGeometry(.2, 5);
+        const geometry = new CircleGeometry(this.pointSize, 5);
         const material = new MeshBasicMaterial({ color: 0xffffff });
         const count = coordinates.length;
 
@@ -125,7 +132,7 @@ export class Map {
         const dummy = new Object3D();
         coordinates.forEach((coordinate, i) => {
             // create points for physics simulation
-            const newPoint = new MapPoint('building', coordinate.x, coordinate.y);
+            const newPoint = new MapPoint('building', coordinate.x, coordinate.y, this.pointSize);
             newPoint.attach(this.rapier, this.physicsWorld);
             this.mapPoints.push(newPoint);
 
@@ -220,11 +227,14 @@ export class Map {
 
     // TODO: set color based on object type too
     public updaterenderedBuildingMeshColor(index: number, mapPoint: MapPoint) {
-        let color = new Color(0x0f1a2e);
+        let color = new Color(0x000000);
 
         switch (mapPoint.state) {
             case "collided":
-                color.setHex(0x206b96)
+                let brightness = Math.max(1 - (mapPoint.clock.getElapsedTime() / mapPoint.brightnessDecayTime), .3) * 100;
+                brightness += 10 * Math.cos(3 * (mapPoint.hue + this.clock.getElapsedTime()));
+                brightness = Math.min(100, Math.max(0, brightness));
+                color = new Color(`hsl(${mapPoint.hue}, 100%, ${brightness}%)`);
                 break;
         }
 
@@ -240,6 +250,7 @@ export class Map {
         this.mapPoints.forEach((point) => {
             if (point.handle == handle1 || point.handle == handle2) {
                 point.setState('collided');
+                point.clock.start();
             }
         })
     }
@@ -252,12 +263,16 @@ class MapPoint {
     public x: number;
     public y: number;
     public surfaceBody: RigidBody;
-    private pointSize: number = .2;
+    private pointSize: number = .1;
+    public clock: Clock = new Clock();
+    public brightnessDecayTime = 10;
+    public hue = (Math.floor(Math.random() * 70) + 280) % 360;
 
-    constructor(type: string, x: number, y: number) {
+    constructor(type: string, x: number, y: number, pointSize: number) {
         this.type = type;
         this.x = x;
         this.y = y;
+        this.pointSize = pointSize;
     }
 
     public attach(rapier: Rapier, physicsWorld: World) {
@@ -268,7 +283,8 @@ class MapPoint {
         this.surfaceBody = physicsWorld!.createRigidBody(rbDesc);
 
         // Create collider for point
-        const clDesc = rapier.ColliderDesc.cuboid(this.pointSize, this.pointSize)
+        const clDesc = rapier.ColliderDesc.ball(this.pointSize, this.pointSize)
+            // const clDesc = rapier.ColliderDesc.cuboid(this.pointSize, this.pointSize)
             .setFriction(0.0)
             .setFrictionCombineRule(rapier.CoefficientCombineRule.Max)
             .setRestitution(1.0)

@@ -1,6 +1,7 @@
 import {
     Scene,
     Clock,
+    Color,
     Vector3,
     Vector4,
     Mesh,
@@ -14,15 +15,17 @@ import {
 import toonVertexShader from '../shaders/toon.vert?raw'
 import toonFragmentShader from '../shaders/toon.frag?raw'
 
-import chirp from '../sounds/chirp-placeholder.wav'
-import chirpReverb from '../sounds/chirp-placeholder-reverb.wav'
+import tone from '../sounds/tone.wav'
+import toneReverb from '../sounds/tone-reverb.wav'
+
+const pitches = [0, 1.4, 3.1, 6.1, 11, 12];
 
 export class Wavefront {
     position: Vector3;
     numPoints: number;
     pointSize: number;
     pointVelocity: number;
-    velocityJitter: number;
+    positionJitter: number;
     angleJitter: number;
     pointSpawnDistance: number;
     age: number;
@@ -37,25 +40,27 @@ export class Wavefront {
     constructor(
         lifespan: number,
         position: Vector3,
-        numPoints: number = 64,
-        pointSize: number = .2,
-        pointVelocity: number = 10,
-        velocityJitter: number = 1.0,
-        angleJitter: number = 1.0,
+        numPoints: number = 180,
+        pointSize: number = .1,
+        pointVelocity: number = 13,
+        positionJitter: number = .1,
+        velocityJitter: number = .5,
+        angleJitter: number = .05,
         pointSpawnDistance: number = 0,
     ) {
         this.position = position;
         this.numPoints = numPoints;
         this.pointSize = pointSize;
         this.pointVelocity = pointVelocity;
-        this.velocityJitter = velocityJitter;
+        this.positionJitter = positionJitter;
         this.angleJitter = angleJitter;
         this.pointSpawnDistance = pointSpawnDistance;
         this.lifespan = lifespan;
 
-        const angleOffset = angleJitter * Math.random()
 
-        this.playbackRate = 1 + (Math.random() * .5);
+
+        const pitchIndex = Math.floor(Math.random() * (pitches.length - 1))
+        this.playbackRate = 1 + pitches[pitchIndex] / 12;
         this.initialSound = undefined;
 
         this.age = 0
@@ -64,22 +69,21 @@ export class Wavefront {
         for (let i = 0; i < this.numPoints; i++) {
 
             // Calculate initial position and velocity of points
+            const angleOffset = angleJitter * Math.random()
             const angle = (i / this.numPoints) * Math.PI * 2 + angleOffset;
 
-            const x = this.position.x + this.pointSpawnDistance * Math.sin(angle);
-            const y = this.position.y + this.pointSpawnDistance * Math.cos(angle);
+            const radiusOffset = positionJitter * Math.random()
+            const x = this.position.x + (this.pointSpawnDistance + radiusOffset) * Math.sin(angle);
+            const y = this.position.y + (this.pointSpawnDistance + radiusOffset) * Math.cos(angle);
 
-            const xVel = this.pointVelocity * Math.sin(angle)
-            const yVel = this.pointVelocity * Math.cos(angle)
+            const velocityOffset = velocityJitter * Math.random()
+            const xVel = (this.pointVelocity + velocityOffset) * Math.sin(angle)
+            const yVel = (this.pointVelocity + velocityOffset) * Math.cos(angle)
 
             const jitter = .5;
 
-            const lifespan = this.lifespan;
-
-            const soundID = ''
-
             // Add point to point array
-            const point = new WavefrontPoint(x, y, xVel, yVel, pointSize, jitter, lifespan, soundID);
+            const point = new WavefrontPoint(x, y, xVel, yVel, pointSize, jitter, this.lifespan, this.playbackRate);
             this.points.push(point)
         }
 
@@ -113,16 +117,16 @@ export class Wavefront {
         scene.add(this.centerMesh);
 
         // Play initial sound when wavefront is spawned
-        this.playInitialSound();
+        // this.playInitialSound();
     }
 
     private playInitialSound() {
-        // Load and play initial chirp sound
+        // Load and play initial tone sound
         const audioLoader = new AudioLoader();
         let sound = this.initialSound;
         const playbackRate = this.playbackRate
 
-        audioLoader.load(chirp, function (buffer) {
+        audioLoader.load(tone, function (buffer) {
             sound!.setBuffer(buffer);
             sound!.setRefDistance(20);
             sound!.setPlaybackRate(playbackRate);
@@ -132,11 +136,9 @@ export class Wavefront {
 
     public update() {
         this.age = this.clock.getElapsedTime();
-
         // Update rendered wavefront points and age
-        this.points.forEach((point) => {
+        this.points.forEach(point => {
             point.update();
-            point.age = this.age
         })
     }
 
@@ -173,10 +175,11 @@ class WavefrontPoint {
     public jitter: number;
     public age: number;
     public lifespan: number;
-    public soundID;
+    public playbackRate;
     public reflectedSound!: PositionalAudio;
+    public clock: Clock
 
-    constructor(x: number, y: number, xVel: number, yVel: number, pointSize: number, jitter: number, lifespan: number, soundID: string) {
+    constructor(x: number, y: number, xVel: number, yVel: number, pointSize: number, jitter: number, lifespan: number, playbackRate: number) {
         this.x = x;
         this.y = y;
         this.xVel = xVel;
@@ -184,8 +187,11 @@ class WavefrontPoint {
         this.pointSize = pointSize;
         this.jitter = jitter;
         this.lifespan = lifespan
-        this.soundID = soundID;
+        this.playbackRate = playbackRate;
         this.age = 0;
+
+        this.clock = new Clock();
+        this.clock.start();
     }
 
     public attach(rapier: Rapier, physicsWorld: World, scene: Scene, listener: AudioListener) {
@@ -197,7 +203,8 @@ class WavefrontPoint {
         this.sphereBody = physicsWorld!.createRigidBody(rbDesc);
 
         // Create collider for point
-        const clDesc = rapier.ColliderDesc.cuboid(this.pointSize, this.pointSize)
+        const clDesc = rapier.ColliderDesc.ball(this.pointSize, this.pointSize)
+            // const clDesc = rapier.ColliderDesc.cuboid(this.pointSize, this.pointSize)
             .setFriction(0.0)
             .setFrictionCombineRule(rapier.CoefficientCombineRule.Max)
             .setRestitution(1.0)
@@ -227,34 +234,45 @@ class WavefrontPoint {
         this.reflectedSound = new PositionalAudio(listener);
     }
 
+    // Load and play reflected sound upon collision
+    public playReflectedSound() {
+        this.reflectedSound.stop();
+        const audioLoader = new AudioLoader();
+        const volume = 1 - Math.sqrt(this.age / this.lifespan);
+        let sound = this.reflectedSound;
+        let playbackRate = this.playbackRate;
+
+        audioLoader.load(toneReverb, function (buffer) {
+            sound.setBuffer(buffer);
+            sound.setRefDistance(20);
+            sound.setVolume(volume);
+            sound.setPlaybackRate(playbackRate);
+            if (!sound.isPlaying) {
+                sound.play();
+            }
+        });
+    }
+
+    public remove(physicsWorld: World, scene: Scene) {
+        scene.remove(this.sphereMesh)
+        physicsWorld.removeRigidBody(this.sphereBody);
+    }
+
     public update() {
         // Update point position in renderer
         const position = this.sphereBody!.translation();
         this.sphereMesh.position.set(position.x, position.y, 0);
 
-        // Update point scale in renderer
-        const scaleDecayCoeff = .01;
-        const scale = this.sphereMesh.scale
-        this.sphereMesh.scale.set(scale.x + scaleDecayCoeff, scale.y + scaleDecayCoeff, scale.z + scaleDecayCoeff);
-
-        // Update point color in renderer
-        const colorDecayCoeff = 1 - (this.age / this.lifespan) ** 2;
-        const flicker = Math.sin(this.age * .2 + 3 * Math.random()) * .01;
-        const color = this.sphereMesh.material.uniforms.color.value;
-        this.sphereMesh.material.uniforms.color.value = new Vector4(
-            color.x * colorDecayCoeff + flicker,
-            color.y * colorDecayCoeff + flicker,
-            color.z * colorDecayCoeff + flicker,
-            color.w
-        );
-
         // Check if point needs updating based on state
         if (this.needsUpdate) {
             // Update point if it has collided;
-            if (this.state = 'collided') {
+            if (this.state == 'collided') {
+                // Reset age clock
+                // this should have a counter for number of reflections to keep particles from reflecting forever
+                this.age /= 9;
+
                 // Update color in renderer
-                // TODO: convert to HSL to easily change color instead of setting new brightness
-                this.sphereMesh.material.uniforms.color.value = new Vector4(color.x - .2, color.y - .2, color.z + .3, color.w);
+                this.sphereMesh.material.uniforms.color.value = new Vector4(0.0, 0.0, 1.0, 1.0);
 
                 // Update velocity to add jitter
                 let linVel = this.sphereBody.linvel();
@@ -262,25 +280,24 @@ class WavefrontPoint {
                 let newY = linVel.y + this.jitter * (Math.random() - .5)
                 this.sphereBody.setLinvel({ x: newX, y: newY }, true);
 
-                // Load and play reflected sound upon collision
-                this.reflectedSound.stop();
-                const audioLoader = new AudioLoader();
-                const volume = 1 - Math.sqrt(this.age / this.lifespan);
-                let sound = this.reflectedSound;
-
-                audioLoader.load(chirpReverb, function (buffer) {
-                    sound.setBuffer(buffer);
-                    sound.setRefDistance(20);
-                    sound.setPlaybackRate(1 + (Math.random() * .2));
-                    sound.setVolume(volume);
-                    if (!sound.isPlaying) {
-                        sound.play();
-                    }
-                });
+                // this.playReflectedSound();
             }
-            // Handle other states here
 
             this.needsUpdate = false;
+        }
+
+        this.age += this.clock.getDelta()
+
+        const brightness = (1 - this.age / this.lifespan) * 100;
+        const hue = 270;
+        const color = new Color(`hsl(${hue}, 100%, ${brightness}%)`);
+        let colorRGB = new Color();
+        color.getRGB(colorRGB);
+
+        if (this.state == 'collided') {
+            this.sphereMesh.material.uniforms.color.value = new Vector4(colorRGB.r, colorRGB.g, colorRGB.b, 1.0);
+        } else {
+            this.sphereMesh.material.uniforms.color.value = new Vector4(brightness / 100, brightness / 100, brightness / 100, 1.0);
         }
     }
 }
