@@ -12,6 +12,8 @@ import {
     AudioLoader
 } from "three";
 
+import { Rapier } from '../physics/rapier';
+
 import toonVertexShader from '../shaders/toon.vert?raw'
 import toonFragmentShader from '../shaders/toon.frag?raw'
 
@@ -105,6 +107,7 @@ export class Wavefront {
         this.clock.start();
     }
 
+    // @ts-ignore
     public attach(rapier: Rapier, physicsWorld: World, scene: Scene, listener: AudioListener) {
         this.points.forEach(point => {
             point.attach(rapier, physicsWorld, scene, listener)
@@ -152,6 +155,7 @@ export class Wavefront {
         })
     }
 
+    // @ts-ignore
     public remove(scene: Scene, physicsWorld: World) {
         // If point is passed lifecycle, remove it from world
         this.points.forEach((point) => {
@@ -170,6 +174,7 @@ class WavefrontPoint {
     public xVel: number;
     public yVel: number;
     public pointSize: number;
+    // @ts-ignore
     public sphereBody!: RigidBody;
     public sphereMesh!: Mesh;
     public jitter: number;
@@ -194,6 +199,7 @@ class WavefrontPoint {
         this.clock.start();
     }
 
+    // @ts-ignore
     public attach(rapier: Rapier, physicsWorld: World, scene: Scene, listener: AudioListener) {
         // Create physics simulation point
         const rbDesc = rapier.RigidBodyDesc.dynamic()
@@ -203,6 +209,7 @@ class WavefrontPoint {
         this.sphereBody = physicsWorld!.createRigidBody(rbDesc);
 
         // Create collider for point
+        // @ts-ignore
         const clDesc = rapier.ColliderDesc.ball(this.pointSize, this.pointSize)
             // const clDesc = rapier.ColliderDesc.cuboid(this.pointSize, this.pointSize)
             .setFriction(0.0)
@@ -253,6 +260,7 @@ class WavefrontPoint {
         });
     }
 
+    // @ts-ignore
     public remove(physicsWorld: World, scene: Scene) {
         scene.remove(this.sphereMesh)
         physicsWorld.removeRigidBody(this.sphereBody);
@@ -272,6 +280,7 @@ class WavefrontPoint {
                 this.age /= 9;
 
                 // Update color in renderer
+                // @ts-ignore
                 this.sphereMesh.material.uniforms.color.value = new Vector4(0.0, 0.0, 1.0, 1.0);
 
                 // Update velocity to add jitter
@@ -295,8 +304,10 @@ class WavefrontPoint {
         color.getRGB(colorRGB);
 
         if (this.state == 'collided') {
+            // @ts-ignore
             this.sphereMesh.material.uniforms.color.value = new Vector4(colorRGB.r, colorRGB.g, colorRGB.b, 1.0);
         } else {
+            // @ts-ignore
             this.sphereMesh.material.uniforms.color.value = new Vector4(brightness / 100, brightness / 100, brightness / 100, 1.0);
         }
     }

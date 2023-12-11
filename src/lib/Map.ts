@@ -11,15 +11,19 @@ import { parse } from 'svg-parser';
 
 import mapSVG from '../map/block.svg?raw'
 // import mapSVG from '../map/buildings.svg?raw'
-import treeCSV from '../map/municipal-trees-small.csv?raw'
+// import treeCSV from '../map/municipal-trees-small.csv?raw'
 
 export class Map {
+    // @ts-ignore
     rapier!: Rapier;
+    // @ts-ignore
     physicsWorld?: World;
     scene: Scene;
-    mapPoints: Array<MapPoint> = []
-    renderedBuildingMesh: InstancedMesh;
-    renderedTreeMesh: InstancedMesh;
+    mapPoints: Array<MapPoint> = [];
+    // ts-ignore
+    renderedBuildingMesh: InstancedMesh | undefined;
+    // ts-ignore
+    renderedTreeMesh: InstancedMesh | undefined;
     pointSize: number = .1;
     clock: Clock = new Clock();
 
@@ -30,7 +34,9 @@ export class Map {
     pointsJitter = 0.2;
 
     constructor(
+        // @ts-ignore
         rapier: Rapier,
+        // @ts-ignore
         physicsWorld: World,
         scene: Scene,
     ) {
@@ -54,10 +60,10 @@ export class Map {
 
         // extract coordinates from parsed JSON
         console.log("Extracting Line Segments...")
-        parsedSvg.children.forEach(child => {
+        parsedSvg.children.forEach((child: any) => {
             if (child.hasOwnProperty('children')) {
-                child.children.forEach(nested => {
-                    nested.children.forEach(polygon => {
+                child.children.forEach((nested: any) => {
+                    nested.children.forEach((polygon: any) => {
                         // TODO: use endpoints to interpolate points in between lines
                         let { x1, y1, x2, y2 } = polygon.properties;
                         if (x1 & y1 & x2 & y2) {
@@ -140,84 +146,83 @@ export class Map {
             dummy.position.set(coordinate.x, coordinate.y, 0);
             dummy.rotation.z = Math.random() * Math.PI;
             dummy.updateMatrix();
-            this.renderedBuildingMesh.setMatrixAt(i, dummy.matrix);
+            this.renderedBuildingMesh!.setMatrixAt(i, dummy.matrix);
         })
     }
 
-    public buildTrees() {
-        const treesCoordinate = this.ingestCSV(treeCSV);
-        let treePoints: { x: number, y: number }[] = [];
+    // public buildTrees() {
+    //     const treesCoordinate = this.ingestCSV(treeCSV);
+    //     let treePoints: { x: number, y: number }[] = [];
 
-        treesCoordinate.forEach(tree => {
-            const singleTreePoints = this.buildSingleTreePoints(tree);
-            singleTreePoints.forEach((point: { x: number, y: number }) => {
-                treePoints.push(point);
-            })
-        })
+    //     treesCoordinate.forEach(tree => {
+    //         const singleTreePoints = this.buildSingleTreePoints(tree);
+    //         singleTreePoints.forEach((point: { x: number, y: number }) => {
+    //             treePoints.push(point);
+    //         })
+    //     })
 
-        const geometry = new CircleGeometry(.2, 5);
-        const material = new MeshBasicMaterial({ color: 0x00ff00 });
-        const count = treePoints.length;
+    //     const geometry = new CircleGeometry(.2, 5);
+    //     const material = new MeshBasicMaterial({ color: 0x00ff00 });
+    //     const count = treePoints.length;
 
-        this.renderedTreeMesh = new InstancedMesh(geometry, material, count);
-        this.scene.add(this.renderedTreeMesh);
+    //     this.renderedTreeMesh = new InstancedMesh(geometry, material, count);
+    //     this.scene.add(this.renderedTreeMesh);
 
-        // create points
-        const dummy = new Object3D();
-        treePoints.forEach((treePoint, i) => {
-            // create points for physics simulation
-            const newPoint = new MapPoint('tree', treePoint.x, treePoint.y);
-            newPoint.attach(this.rapier, this.physicsWorld);
-            this.mapPoints.push(newPoint);
+    //     // create points
+    //     const dummy = new Object3D();
+    //     treePoints.forEach((treePoint, i) => {
+    //         // create points for physics simulation
+    //         const newPoint = new MapPoint('tree', treePoint.x, treePoint.y);
+    //         newPoint.attach(this.rapier, this.physicsWorld);
+    //         this.mapPoints.push(newPoint);
 
-            // set positions of rendered points in instanced mesh
-            dummy.position.set(treePoint.x, treePoint.y, 0);
-            dummy.rotation.z = Math.random() * Math.PI;
-            dummy.updateMatrix();
-            this.renderedTreeMesh.setMatrixAt(i, dummy.matrix);
-        })
-    }
+    //         // set positions of rendered points in instanced mesh
+    //         dummy.position.set(treePoint.x, treePoint.y, 0);
+    //         dummy.rotation.z = Math.random() * Math.PI;
+    //         dummy.updateMatrix();
+    //         this.renderedTreeMesh.setMatrixAt(i, dummy.matrix);
+    //     })
+    // }
 
     // Spiralized trees
-    private buildSingleTreePoints(tree: { id: string, age: number, height: number, x: number, y: number }) {
-        let points: { x: number, y: number }[] = [];
-        const maxAngle = 10;
+    // private buildSingleTreePoints(tree: { id: string, age: number, height: number, x: number, y: number }) {
+    //     let points: { x: number, y: number }[] = [];
+    //     const maxAngle = 10;
 
-        let angle = 0;
-        let radius = .1;
-        while (angle < maxAngle) {
-            let x = tree.x + Math.sin(angle) * radius;
-            let y = tree.y + Math.cos(angle) * radius;
-            points.push({ x, y });
-            radius += .1;
-            angle += 1;
-        }
-        return points
-    }
+    //     let angle = 0;
+    //     let radius = .1;
+    //     while (angle < maxAngle) {
+    //         let x = tree.x + Math.sin(angle) * radius;
+    //         let y = tree.y + Math.cos(angle) * radius;
+    //         points.push({ x, y });
+    //         radius += .1;
+    //         angle += 1;
+    //     }
+    //     return points
+    // }
 
-    private ingestCSV(csv: string) {
-        let lines = csv.split("\n");
-        let result = [];
+    // private ingestCSV(csv: string) {
+    //     let lines = csv.split("\n");
+    //     let result = [];
 
-        for (let i = 1; i < lines.length; i++) {
-            let tree: { id: string, age: number, height: number, x: number, y: number } = {};
-            let currentline = lines[i].split(",");
+    //     for (let i = 1; i < lines.length; i++) {
+    //         let tree: { id: string, age: number, height: number, x: number, y: number } = {};
+    //         let currentline = lines[i].split(",");
 
-            tree.id = currentline[0];
-            tree.age = 2023 - parseInt(currentline[1]);
-            tree.height = parseFloat(currentline[2].split(" ")[0]);
+    //         tree.id = currentline[0];
+    //         tree.age = 2023 - parseInt(currentline[1]);
+    //         tree.height = parseFloat(currentline[2].split(" ")[0]);
 
-            let coordinates = currentline[3].split("POINT (");
-            coordinates = coordinates[1].split(" ");
-            coordinates[1] = coordinates[1].split(")")[0];
-            tree.x = parseFloat(coordinates[0]) * 20000 - 249800;
-            tree.y = parseFloat(coordinates[1]) * 20000 - 1114100;
+    //         let coordinates = currentline[3].split("POINT (");
+    //         coordinates = coordinates[1].split(" ");
+    //         coordinates[1] = coordinates[1].split(")")[0];
+    //         tree.x = parseFloat(coordinates[0]) * 20000 - 249800;
+    //         tree.y = parseFloat(coordinates[1]) * 20000 - 1114100;
 
-            result.push(tree);
-        }
-
-        return result; //JSON
-    }
+    //         result.push(tree);
+    //     }
+    //     return result; //JSON
+    // }
 
     public update() {
         this.mapPoints.forEach((mapPoint, i) => {
@@ -238,10 +243,10 @@ export class Map {
                 break;
         }
 
-        this.renderedBuildingMesh.setColorAt(index, color);
+        this.renderedBuildingMesh!.setColorAt(index, color);
 
-        if (this.renderedBuildingMesh.instanceColor) {
-            this.renderedBuildingMesh.instanceColor.needsUpdate = true;
+        if (this.renderedBuildingMesh!.instanceColor) {
+            this.renderedBuildingMesh!.instanceColor.needsUpdate = true;
         }
     }
 
@@ -258,10 +263,11 @@ export class Map {
 
 class MapPoint {
     public type: string;
-    public handle: number;
+    public handle: number = -1;
     public state: string = "hidden";
     public x: number;
     public y: number;
+    // @ts-ignore
     public surfaceBody: RigidBody;
     private pointSize: number = .1;
     public clock: Clock = new Clock();
@@ -275,6 +281,7 @@ class MapPoint {
         this.pointSize = pointSize;
     }
 
+    // @ts-ignore
     public attach(rapier: Rapier, physicsWorld: World) {
         // Create physics simulation point
         const rbDesc = rapier.RigidBodyDesc.kinematicPositionBased()

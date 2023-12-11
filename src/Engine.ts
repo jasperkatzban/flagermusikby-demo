@@ -46,6 +46,7 @@ export class Engine {
   public readonly update = new EventSource<{ update: number }>();
 
   public rapier!: Rapier;
+  // @ts-ignore
   private physicsWorld?: World;
   private eventQueue: any;
 
@@ -193,7 +194,7 @@ export class Engine {
       for (const [key, point] of Object.entries(wavefront.points)) {
         if (point.age > wavefront.lifespan) {
           point.remove(this.physicsWorld, this.scene);
-          delete wavefront.points[key];
+          delete wavefront.points[key as unknown as number];
         }
       }
       if (wavefront.points.length == 0) {
