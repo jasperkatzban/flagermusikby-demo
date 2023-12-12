@@ -15,7 +15,7 @@ export function createApp() {
   orbitControls.enableRotate = false;
   orbitControls.dampingFactor = 0.05;
   orbitControls.screenSpacePanning = false;
-  orbitControls.zoomToCursor = false;
+  // orbitControls.zoomToCursor = false;
 
   orbitControls.update();
   engine.update.subscribe('update', () => {

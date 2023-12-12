@@ -1,3 +1,5 @@
+import { Rapier } from '../physics/rapier';
+import type { RigidBody, World } from '@dimforge/rapier2d';
 import {
     Scene,
     Clock,
@@ -11,8 +13,6 @@ import {
     PositionalAudio,
     AudioLoader
 } from "three";
-
-import { Rapier } from '../physics/rapier';
 
 import toonVertexShader from '../shaders/toon.vert?raw'
 import toonFragmentShader from '../shaders/toon.frag?raw'
@@ -58,8 +58,6 @@ export class Wavefront {
         this.angleJitter = angleJitter;
         this.pointSpawnDistance = pointSpawnDistance;
         this.lifespan = lifespan;
-
-
 
         const pitchIndex = Math.floor(Math.random() * (pitches.length - 1))
         this.playbackRate = 1 + pitches[pitchIndex] / 12;
@@ -107,7 +105,6 @@ export class Wavefront {
         this.clock.start();
     }
 
-    // @ts-ignore
     public attach(rapier: Rapier, physicsWorld: World, scene: Scene, listener: AudioListener) {
         this.points.forEach(point => {
             point.attach(rapier, physicsWorld, scene, listener)
@@ -155,7 +152,6 @@ export class Wavefront {
         })
     }
 
-    // @ts-ignore
     public remove(scene: Scene, physicsWorld: World) {
         // If point is passed lifecycle, remove it from world
         this.points.forEach((point) => {
@@ -174,7 +170,6 @@ class WavefrontPoint {
     public xVel: number;
     public yVel: number;
     public pointSize: number;
-    // @ts-ignore
     public sphereBody!: RigidBody;
     public sphereMesh!: Mesh;
     public jitter: number;
@@ -199,7 +194,6 @@ class WavefrontPoint {
         this.clock.start();
     }
 
-    // @ts-ignore
     public attach(rapier: Rapier, physicsWorld: World, scene: Scene, listener: AudioListener) {
         // Create physics simulation point
         const rbDesc = rapier.RigidBodyDesc.dynamic()
@@ -209,8 +203,7 @@ class WavefrontPoint {
         this.sphereBody = physicsWorld!.createRigidBody(rbDesc);
 
         // Create collider for point
-        // @ts-ignore
-        const clDesc = rapier.ColliderDesc.ball(this.pointSize, this.pointSize)
+        const clDesc = rapier.ColliderDesc.ball(this.pointSize)
             // const clDesc = rapier.ColliderDesc.cuboid(this.pointSize, this.pointSize)
             .setFriction(0.0)
             .setFrictionCombineRule(rapier.CoefficientCombineRule.Max)
@@ -260,7 +253,6 @@ class WavefrontPoint {
         });
     }
 
-    // @ts-ignore
     public remove(physicsWorld: World, scene: Scene) {
         scene.remove(this.sphereMesh)
         physicsWorld.removeRigidBody(this.sphereBody);
@@ -280,8 +272,7 @@ class WavefrontPoint {
                 this.age /= 9;
 
                 // Update color in renderer
-                // @ts-ignore
-                this.sphereMesh.material.uniforms.color.value = new Vector4(0.0, 0.0, 1.0, 1.0);
+                (this.sphereMesh.material as ShaderMaterial).uniforms.color.value = new Vector4(0.0, 0.0, 1.0, 1.0);
 
                 // Update velocity to add jitter
                 let linVel = this.sphereBody.linvel();
@@ -300,15 +291,13 @@ class WavefrontPoint {
         const brightness = (1 - this.age / this.lifespan) * 100;
         const hue = 270;
         const color = new Color(`hsl(${hue}, 100%, ${brightness}%)`);
-        let colorRGB = new Color();
+        let colorRGB = new Color(1, 1, 1);
         color.getRGB(colorRGB);
 
         if (this.state == 'collided') {
-            // @ts-ignore
-            this.sphereMesh.material.uniforms.color.value = new Vector4(colorRGB.r, colorRGB.g, colorRGB.b, 1.0);
+            (this.sphereMesh.material as ShaderMaterial).uniforms.color.value = new Vector4(colorRGB.r, colorRGB.g, colorRGB.b, 1.0);
         } else {
-            // @ts-ignore
-            this.sphereMesh.material.uniforms.color.value = new Vector4(brightness / 100, brightness / 100, brightness / 100, 1.0);
+            (this.sphereMesh.material as ShaderMaterial).uniforms.color.value = new Vector4(brightness / 100, brightness / 100, brightness / 100, 1.0);
         }
     }
 }

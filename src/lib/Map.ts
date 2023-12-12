@@ -1,3 +1,5 @@
+import { RigidBody, World } from '@dimforge/rapier2d';
+import { Rapier } from '../physics/rapier';
 import {
     Scene,
     InstancedMesh,
@@ -10,19 +12,13 @@ import {
 import { parse } from 'svg-parser';
 
 import mapSVG from '../map/block.svg?raw'
-// import mapSVG from '../map/buildings.svg?raw'
-// import treeCSV from '../map/municipal-trees-small.csv?raw'
 
 export class Map {
-    // @ts-ignore
-    rapier!: Rapier;
-    // @ts-ignore
-    physicsWorld?: World;
+    rapier: Rapier;
+    physicsWorld: World;
     scene: Scene;
     mapPoints: Array<MapPoint> = [];
-    // ts-ignore
     renderedBuildingMesh: InstancedMesh | undefined;
-    // ts-ignore
     renderedTreeMesh: InstancedMesh | undefined;
     pointSize: number = .1;
     clock: Clock = new Clock();
@@ -34,9 +30,7 @@ export class Map {
     pointsJitter = 0.2;
 
     constructor(
-        // @ts-ignore
         rapier: Rapier,
-        // @ts-ignore
         physicsWorld: World,
         scene: Scene,
     ) {
@@ -138,8 +132,7 @@ export class Map {
         const dummy = new Object3D();
         coordinates.forEach((coordinate, i) => {
             // create points for physics simulation
-            const newPoint = new MapPoint('building', coordinate.x, coordinate.y, this.pointSize);
-            newPoint.attach(this.rapier, this.physicsWorld);
+            const newPoint = new MapPoint(this.rapier, this.physicsWorld!, 'building', coordinate.x, coordinate.y, this.pointSize);
             this.mapPoints.push(newPoint);
 
             // set positions of rendered points in instanced mesh
@@ -262,42 +255,40 @@ export class Map {
 }
 
 class MapPoint {
+    public rapier: Rapier;
     public type: string;
     public handle: number = -1;
     public state: string = "hidden";
     public x: number;
     public y: number;
-    // @ts-ignore
     public surfaceBody: RigidBody;
     private pointSize: number = .1;
     public clock: Clock = new Clock();
     public brightnessDecayTime = 10;
     public hue = (Math.floor(Math.random() * 70) + 280) % 360;
 
-    constructor(type: string, x: number, y: number, pointSize: number) {
+    constructor(rapier: Rapier, physicsWorld: World, type: string, x: number, y: number, pointSize: number) {
+        this.rapier = rapier;
         this.type = type;
         this.x = x;
         this.y = y;
         this.pointSize = pointSize;
-    }
 
-    // @ts-ignore
-    public attach(rapier: Rapier, physicsWorld: World) {
         // Create physics simulation point
-        const rbDesc = rapier.RigidBodyDesc.kinematicPositionBased()
+        const rbDesc = this.rapier.RigidBodyDesc.kinematicPositionBased()
             .setTranslation(this.x, this.y)
             .setCcdEnabled(true);
-        this.surfaceBody = physicsWorld!.createRigidBody(rbDesc);
+        this.surfaceBody = physicsWorld.createRigidBody(rbDesc);
 
         // Create collider for point
-        const clDesc = rapier.ColliderDesc.ball(this.pointSize, this.pointSize)
+        const clDesc = this.rapier.ColliderDesc.ball(this.pointSize)
             // const clDesc = rapier.ColliderDesc.cuboid(this.pointSize, this.pointSize)
             .setFriction(0.0)
-            .setFrictionCombineRule(rapier.CoefficientCombineRule.Max)
+            .setFrictionCombineRule(this.rapier.CoefficientCombineRule.Max)
             .setRestitution(1.0)
-            .setRestitutionCombineRule(rapier.CoefficientCombineRule.Max)
+            .setRestitutionCombineRule(this.rapier.CoefficientCombineRule.Max)
             .setCollisionGroups(0x00020001)
-            .setActiveEvents(rapier.ActiveEvents.COLLISION_EVENTS)
+            .setActiveEvents(this.rapier.ActiveEvents.COLLISION_EVENTS)
         physicsWorld!.createCollider(clDesc, this.surfaceBody);
 
         // Capture unique identifier for point body

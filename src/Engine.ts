@@ -16,11 +16,12 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js';
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { VignetteShader } from './shaders/vignette';
+import type { World } from '@dimforge/rapier2d';
 import { getRapier, Rapier } from './physics/rapier';
-import * as Stats from 'stats.js';
+import Stats from 'stats.js';
 
 import { EventSource, ResourcePool } from './lib';
 
@@ -46,15 +47,14 @@ export class Engine {
   public readonly update = new EventSource<{ update: number }>();
 
   public rapier!: Rapier;
-  // @ts-ignore
-  private physicsWorld?: World;
+  private physicsWorld!: World;
   private eventQueue: any;
 
   private mount: HTMLElement | undefined;
   private frameId: number | null = null;
   private clock = new Clock();
 
-  public map: Map | undefined;
+  public map: Map | undefined = undefined;
   public wavefronts: { [key: string]: Wavefront } = {};
 
   // Renderer setup
@@ -104,8 +104,6 @@ export class Engine {
     const outputPass = new OutputPass();
     this.composer.addPass(outputPass);
 
-    this.map = undefined;
-
     this.cursorPos = new Vector3(0, 0, 0);
 
     // Set up audio listener
@@ -127,13 +125,13 @@ export class Engine {
 
     // Make sure physics WASM bundle is initialized before starting rendering loop.
     // Physics objects cannot be created until after physics engine is initialized.
-    const r = (this.rapier = await getRapier());
+    this.rapier = (this.rapier = await getRapier());
 
     // Create physics
     const gravity = { x: 0, y: 0 };
-    this.physicsWorld = new r.World(gravity);
+    this.physicsWorld = new this.rapier.World(gravity);
     // To avoid leaking WASM resources, this MUST be freed manually with eventQueue.free() once you are done using it.
-    this.eventQueue = new r.EventQueue(true);
+    this.eventQueue = new this.rapier.EventQueue(true);
 
     // Create cursor
     const cursorMaterial = new ShaderMaterial({
@@ -193,12 +191,12 @@ export class Engine {
       wavefront.update();
       for (const [key, point] of Object.entries(wavefront.points)) {
         if (point.age > wavefront.lifespan) {
-          point.remove(this.physicsWorld, this.scene);
+          point.remove(this.physicsWorld!, this.scene);
           delete wavefront.points[key as unknown as number];
         }
       }
       if (wavefront.points.length == 0) {
-        wavefront.remove(this.scene, this.physicsWorld);
+        wavefront.remove(this.scene, this.physicsWorld!);
         delete this.wavefronts[key];
       }
     }
@@ -236,7 +234,6 @@ export class Engine {
     this.cursorDisplacement += cursorPosDelta;
     let cursorExpression = 1 + (.3 + cursorPosDelta * .02) * Math.sin(this.cursorDisplacement / 10);
     cursorExpression = this.lerp(cursorExpression, .6, 0.15);
-    console.log(cursorExpression);
 
     this.cursorMesh?.scale.set(cursorExpression, cursorExpression, cursorExpression);
   }
@@ -244,7 +241,7 @@ export class Engine {
   public fireClickEvent() {
     const lifespan = 1.5;
     const wavefront = new Wavefront(lifespan, this.cursorPos);
-    wavefront.attach(this.rapier, this.physicsWorld, this.scene, this.listener);
+    wavefront.attach(this.rapier, this.physicsWorld!, this.scene, this.listener);
     this.wavefronts[this.time.toString()] = wavefront
   }
 
