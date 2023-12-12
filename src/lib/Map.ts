@@ -11,7 +11,7 @@ import {
 } from "three";
 import { parse } from 'svg-parser';
 
-import mapSVG from '../map/block.svg?raw'
+import mapSVG from '../map/buildings-region.svg?raw'
 
 export class Map {
     rapier: Rapier;
@@ -23,10 +23,9 @@ export class Map {
     pointSize: number = .1;
     clock: Clock = new Clock();
 
-    // origin = { x: -120, y: 230 };
-    origin = { x: -57, y: 51 };
-    pointsFillGap = 0.1;
-    minPointDistance = 0.05;
+    origin = { x: -150, y: 330 };
+    pointsFillGap = .2;
+    minPointDistance = 0.08;
     pointsJitter = 0.2;
 
     constructor(
@@ -57,18 +56,33 @@ export class Map {
         parsedSvg.children.forEach((child: any) => {
             if (child.hasOwnProperty('children')) {
                 child.children.forEach((nested: any) => {
-                    nested.children.forEach((polygon: any) => {
-                        // TODO: use endpoints to interpolate points in between lines
-                        let { x1, y1, x2, y2 } = polygon.properties;
-                        if (x1 & y1 & x2 & y2) {
-                            // Offset points by origin they spawn in view and correct for y inversion
-                            x1 += this.origin.x;
-                            y1 = -y1 + this.origin.y;
-                            x2 += this.origin.x;
-                            y2 = -y2 + this.origin.y;
-                            segments.push({ x1, y1, x2, y2 });
+                    // for polyline type svg
+                    if (nested.tagName == 'polyline') {
+                        let coordinates = nested.properties.points.split(" ");
+                        coordinates = coordinates.map((coordinate: string) => parseFloat(coordinate));
+
+                        for (let i = 0; i < coordinates.length - 3; i += 4) {
+                            const segment = {
+                                x1: coordinates[i] + this.origin.x,
+                                y1: -coordinates[i + 1] + this.origin.y,
+                                x2: coordinates[i + 2] + this.origin.x,
+                                y2: -coordinates[i + 3] + this.origin.y
+                            }
+                            segments.push(segment);
                         }
-                    })
+                    }
+                    // nested.children.forEach((polygon: any) => {
+                    //     // TODO: use endpoints to interpolate points in between lines
+                    //     let { x1, y1, x2, y2 } = polygon.properties;
+                    //     if (x1 & y1 & x2 & y2) {
+                    //         // Offset points by origin they spawn in view and correct for y inversion
+                    //         x1 += this.origin.x;
+                    //         y1 = -y1 + this.origin.y;
+                    //         x2 += this.origin.x;
+                    //         y2 = -y2 + this.origin.y;
+                    //         segments.push({ x1, y1, x2, y2 });
+                    //     }
+                    // })
                 })
             }
         })
@@ -76,13 +90,13 @@ export class Map {
 
         // Remove duplicate segments
         // TODO: temporary, should not need to filter duplicate points at runtime
-        console.log("Removing duplicate segments...")
-        segments = segments!.filter((value, index, self) =>
-            index === self.findIndex((t) => (
-                (t.x1 === value.x1 && t.y1 === value.y1 && t.x2 === value.x2 && t.y2 === value.y2) || (t.x1 === value.x2 && t.y1 === value.y2 && t.x2 === value.x1 && t.y2 === value.y1)
-            ))
-        )
-        console.log(`Done, there are now ${segments.length} segments!`);
+        // console.log("Removing duplicate segments...")
+        // segments = segments!.filter((value, index, self) =>
+        //     index === self.findIndex((t) => (
+        //         (t.x1 === value.x1 && t.y1 === value.y1 && t.x2 === value.x2 && t.y2 === value.y2) || (t.x1 === value.x2 && t.y1 === value.y2 && t.x2 === value.x1 && t.y2 === value.y1)
+        //     ))
+        // )
+        // console.log(`Done, there are now ${segments.length} segments!`);
 
         let coordinates: { x: number, y: number }[] = [];
 
@@ -105,13 +119,13 @@ export class Map {
         })
         console.log(`Done, created ${coordinates.length} points!`)
 
-        console.log("Merging coordinates by distance threshold...")
-        coordinates = coordinates!.filter((value, index, self) =>
-            index === self.findIndex((t) => (
-                (Math.abs(t.x - value.x) < this.minPointDistance) && (Math.abs(t.y - value.y) < this.minPointDistance)
-            ))
-        )
-        console.log(`Done, there are now ${coordinates.length} points!`);
+        // console.log("Merging coordinates by distance threshold...")
+        // coordinates = coordinates!.filter((value, index, self) =>
+        //     index === self.findIndex((t) => (
+        //         (Math.abs(t.x - value.x) < this.minPointDistance) && (Math.abs(t.y - value.y) < this.minPointDistance)
+        //     ))
+        // )
+        // console.log(`Done, there are now ${coordinates.length} points!`);
 
         console.log("Adding jitter to points...")
         coordinates.forEach(coordinate => {

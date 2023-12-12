@@ -239,7 +239,7 @@ export class Engine {
   }
 
   public fireClickEvent() {
-    const lifespan = 1.5;
+    const lifespan = 2;
     const wavefront = new Wavefront(lifespan, this.cursorPos);
     wavefront.attach(this.rapier, this.physicsWorld!, this.scene, this.listener);
     this.wavefronts[this.time.toString()] = wavefront
