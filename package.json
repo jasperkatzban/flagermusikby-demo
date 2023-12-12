@@ -2,7 +2,8 @@
   "name": "flagermusenesby-demo",
   "version": "0.1.0",
   "scripts": {
-    "build": "tsc && vite build",
+    "build": "vite build",
+    "preview": "vite preview",
     "start": "vite --port 4000",
     "lint": "eslint -c .eslintrc.js src --ext ts --ext tsx",
     "serve": "vite preview",
