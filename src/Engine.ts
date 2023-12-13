@@ -1,16 +1,15 @@
 import {
-  Clock,
-  Mesh,
-  OrthographicCamera,
   Scene,
-  AmbientLight,
-  SphereGeometry,
-  Vector3,
-  Vector4,
   WebGLRenderer,
   ShaderMaterial,
-  AudioListener,
+  OrthographicCamera,
+  AmbientLight,
+  Mesh,
+  SphereGeometry,
   Vector2,
+  Vector3,
+  Vector4,
+  Clock,
 } from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
@@ -23,12 +22,14 @@ import type { World } from '@dimforge/rapier2d';
 import { getRapier, Rapier } from './physics/rapier';
 import Stats from 'stats.js';
 
+import { Wavefront, Map, Sound } from './lib';
 import { EventSource, ResourcePool } from './lib';
-
-import { Wavefront, Map } from './lib';
 
 import toonVertexShader from './shaders/toon.vert?raw'
 import toonFragmentShader from './shaders/toon.frag?raw'
+
+import tone from './sounds/tone.wav'
+import toneReverb from './sounds/tone-reverb.wav'
 
 // Set up FPS stats
 const stats = new Stats()
@@ -70,7 +71,8 @@ export class Engine {
   public mousePos = new Vector2(0, 0);
 
   // Audio Setup
-  private listener: AudioListener;
+  private defaultTone: Sound;
+  private defaultToneReverb: Sound;
 
   constructor() {
     // Set up renderer scene
@@ -106,9 +108,16 @@ export class Engine {
 
     this.cursorPos = new Vector3(0, 0, 0);
 
-    // Set up audio listener
-    this.listener = new AudioListener();
-    this.camera.add(this.listener);
+    // Set up sound
+    this.defaultTone = new Sound(tone);
+    this.defaultToneReverb = new Sound(toneReverb);
+  }
+
+  public loadSounds() {
+    return Promise.all([
+      this.defaultTone.load(),
+      this.defaultToneReverb.load()
+    ]);
   }
 
   /** Shut down the renderer and release all resources. */
@@ -146,8 +155,10 @@ export class Engine {
     this.cursorMesh = new Mesh(cursorGeometry, cursorMaterial);
     this.scene.add(this.cursorMesh)
 
-    // Add world map
-    this.map = new Map(this.rapier, this.physicsWorld, this.scene);
+    // Add world map after sounds are loaded
+    this.loadSounds().then(values => {
+      this.map = new Map(this.rapier, this.physicsWorld, this.scene, this.defaultToneReverb);
+    });
 
     const ambientLight = new AmbientLight('white', 20.0);
     this.scene.add(ambientLight);
@@ -178,10 +189,34 @@ export class Engine {
 
     // Check for collision events
     this.eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
-      this.map?.checkCollisionEvents(handle1, handle2);
+      let mapPointType;
+      let wavefrontDetune = 0;
+      let wavefrontPointAge = 0;
+      let wavefrontPointLifespan = 1;
+
       for (const [key, wavefront] of Object.entries(this.wavefronts)) {
-        wavefront.checkCollisionEvents(handle1, handle2);
+        wavefrontDetune = wavefront.detune;
+        wavefront.points.forEach((point) => {
+          if (point.handle == handle1 || point.handle == handle2) {
+            point.state = 'collided';
+            point.needsUpdate = true;
+            wavefrontPointAge = point.age;
+            wavefrontPointLifespan = point.lifespan;
+          }
+        });
       }
+
+      const volume = Math.max(.6 - Math.sqrt(wavefrontPointAge / wavefrontPointLifespan), 0);
+
+      this.map?.mapPoints.forEach((point) => {
+        if (point.handle == handle1 || point.handle == handle2) {
+          point.setState('collided');
+          point.clock.start();
+          mapPointType = point.type;
+          // TODO: set pan
+          point.playReflectedSound(volume, wavefrontDetune)
+        }
+      })
     });
 
     // Update environment and wavefronts
@@ -232,7 +267,7 @@ export class Engine {
 
     const cursorPosDelta = Math.sqrt((this.cursorPos.x - targetCursorPos.x) ** 2 + (this.cursorPos.y - targetCursorPos.y) ** 2);
     this.cursorDisplacement += cursorPosDelta;
-    let cursorExpression = 1 + (.3 + cursorPosDelta * .02) * Math.sin(this.cursorDisplacement / 10);
+    let cursorExpression = 1 + (.3 + cursorPosDelta * .02) * Math.sin(this.cursorDisplacement / 7);
     cursorExpression = this.lerp(cursorExpression, .6, 0.15);
 
     this.cursorMesh?.scale.set(cursorExpression, cursorExpression, cursorExpression);
@@ -240,8 +275,9 @@ export class Engine {
 
   public fireClickEvent() {
     const lifespan = 2;
-    const wavefront = new Wavefront(lifespan, this.cursorPos);
-    wavefront.attach(this.rapier, this.physicsWorld!, this.scene, this.listener);
+    const wavefront = new Wavefront(lifespan, this.cursorPos, this.defaultTone);
+    wavefront.attach(this.rapier, this.physicsWorld!, this.scene);
+    wavefront.playSoundEmission();
     this.wavefronts[this.time.toString()] = wavefront
   }
 

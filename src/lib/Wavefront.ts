@@ -9,39 +9,35 @@ import {
     Mesh,
     SphereGeometry,
     ShaderMaterial,
-    AudioListener,
-    PositionalAudio,
-    AudioLoader
 } from "three";
+import { Sound } from '../lib'
 
 import toonVertexShader from '../shaders/toon.vert?raw'
 import toonFragmentShader from '../shaders/toon.frag?raw'
 
-import tone from '../sounds/tone.wav'
-import toneReverb from '../sounds/tone-reverb.wav'
-
-const pitches = [0, 1.4, 3.1, 6.1, 11, 12];
+const pitches = [0, 2, 4, 7, 11, 12];
 
 export class Wavefront {
-    position: Vector3;
-    numPoints: number;
-    pointSize: number;
-    pointVelocity: number;
-    positionJitter: number;
-    angleJitter: number;
-    pointSpawnDistance: number;
-    age: number;
-    lifespan: number;
-    clock: Clock;
+    public lifespan: number;
+    public position: Vector3;
+    public sound: Sound;
+    public numPoints: number;
+    public pointSize: number;
+    public pointVelocity: number;
+    public positionJitter: number;
+    public angleJitter: number;
+    public pointSpawnDistance: number;
+    public age: number;
+    public clock: Clock;
 
-    centerMesh: Mesh;
-    points: Array<WavefrontPoint> = []
-    initialSound: PositionalAudio | undefined;
-    playbackRate: number;
+    public centerMesh: Mesh;
+    public points: Array<WavefrontPoint> = []
+    public detune: number;
 
     constructor(
         lifespan: number,
         position: Vector3,
+        sound: Sound,
         numPoints: number = 180,
         pointSize: number = .1,
         pointVelocity: number = 13,
@@ -52,6 +48,7 @@ export class Wavefront {
     ) {
         this.position = position;
         this.numPoints = numPoints;
+        this.sound = sound;
         this.pointSize = pointSize;
         this.pointVelocity = pointVelocity;
         this.positionJitter = positionJitter;
@@ -59,9 +56,8 @@ export class Wavefront {
         this.pointSpawnDistance = pointSpawnDistance;
         this.lifespan = lifespan;
 
-        const pitchIndex = Math.floor(Math.random() * (pitches.length - 1))
-        this.playbackRate = 1 + pitches[pitchIndex] / 12;
-        this.initialSound = undefined;
+        const pitchIndex = Math.round(Math.random() * (pitches.length - 1))
+        this.detune = pitches[pitchIndex] * 100;
 
         this.age = 0
 
@@ -83,10 +79,11 @@ export class Wavefront {
             const jitter = .5;
 
             // Add point to point array
-            const point = new WavefrontPoint(x, y, xVel, yVel, pointSize, jitter, this.lifespan, this.playbackRate);
+            const point = new WavefrontPoint(x, y, xVel, yVel, pointSize, jitter, this.lifespan);
             this.points.push(point)
         }
 
+        // TODO: potentially deprecated
         // Create an empty object to attach the emitted sound from
         const centerMaterial = new ShaderMaterial({
             uniforms: {
@@ -105,33 +102,12 @@ export class Wavefront {
         this.clock.start();
     }
 
-    public attach(rapier: Rapier, physicsWorld: World, scene: Scene, listener: AudioListener) {
+    public attach(rapier: Rapier, physicsWorld: World, scene: Scene) {
         this.points.forEach(point => {
-            point.attach(rapier, physicsWorld, scene, listener)
+            point.attach(rapier, physicsWorld, scene)
         })
 
-        // Create the PositionalAudio object (passing in the listener)
-        this.initialSound = new PositionalAudio(listener);
-        this.centerMesh.add(this.initialSound);
-
         scene.add(this.centerMesh);
-
-        // Play initial sound when wavefront is spawned
-        // this.playInitialSound();
-    }
-
-    private playInitialSound() {
-        // Load and play initial tone sound
-        const audioLoader = new AudioLoader();
-        let sound = this.initialSound;
-        const playbackRate = this.playbackRate
-
-        audioLoader.load(tone, function (buffer) {
-            sound!.setBuffer(buffer);
-            sound!.setRefDistance(20);
-            sound!.setPlaybackRate(playbackRate);
-            sound!.play();
-        });
     }
 
     public update() {
@@ -150,6 +126,10 @@ export class Wavefront {
                 point.needsUpdate = true;
             }
         })
+    }
+
+    public playSoundEmission() {
+        this.sound.play(1, this.detune);
     }
 
     public remove(scene: Scene, physicsWorld: World) {
@@ -175,11 +155,9 @@ class WavefrontPoint {
     public jitter: number;
     public age: number;
     public lifespan: number;
-    public playbackRate;
-    public reflectedSound!: PositionalAudio;
     public clock: Clock
 
-    constructor(x: number, y: number, xVel: number, yVel: number, pointSize: number, jitter: number, lifespan: number, playbackRate: number) {
+    constructor(x: number, y: number, xVel: number, yVel: number, pointSize: number, jitter: number, lifespan: number) {
         this.x = x;
         this.y = y;
         this.xVel = xVel;
@@ -187,14 +165,13 @@ class WavefrontPoint {
         this.pointSize = pointSize;
         this.jitter = jitter;
         this.lifespan = lifespan
-        this.playbackRate = playbackRate;
         this.age = 0;
 
         this.clock = new Clock();
         this.clock.start();
     }
 
-    public attach(rapier: Rapier, physicsWorld: World, scene: Scene, listener: AudioListener) {
+    public attach(rapier: Rapier, physicsWorld: World, scene: Scene) {
         // Create physics simulation point
         const rbDesc = rapier.RigidBodyDesc.dynamic()
             .setTranslation(this.x, this.y)
@@ -229,28 +206,6 @@ class WavefrontPoint {
         const geometry = new SphereGeometry(this.pointSize, 0, 5);
         this.sphereMesh = new Mesh(geometry, pointMaterial);
         scene.add(this.sphereMesh)
-
-        // Load a sound and set it as the PositionalAudio object's buffer
-        this.reflectedSound = new PositionalAudio(listener);
-    }
-
-    // Load and play reflected sound upon collision
-    public playReflectedSound() {
-        this.reflectedSound.stop();
-        const audioLoader = new AudioLoader();
-        const volume = 1 - Math.sqrt(this.age / this.lifespan);
-        let sound = this.reflectedSound;
-        let playbackRate = this.playbackRate;
-
-        audioLoader.load(toneReverb, function (buffer) {
-            sound.setBuffer(buffer);
-            sound.setRefDistance(20);
-            sound.setVolume(volume);
-            sound.setPlaybackRate(playbackRate);
-            if (!sound.isPlaying) {
-                sound.play();
-            }
-        });
     }
 
     public remove(physicsWorld: World, scene: Scene) {
@@ -279,8 +234,6 @@ class WavefrontPoint {
                 let newX = linVel.x + this.jitter * (Math.random() - .5)
                 let newY = linVel.y + this.jitter * (Math.random() - .5)
                 this.sphereBody.setLinvel({ x: newX, y: newY }, true);
-
-                // this.playReflectedSound();
             }
 
             this.needsUpdate = false;

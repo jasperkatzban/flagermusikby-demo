@@ -11,31 +11,38 @@ import {
 } from "three";
 import { parse } from 'svg-parser';
 
+import { Sound } from '../lib'
+
 import mapSVG from '../map/buildings-region.svg?raw'
 
 export class Map {
-    rapier: Rapier;
-    physicsWorld: World;
-    scene: Scene;
-    mapPoints: Array<MapPoint> = [];
-    renderedBuildingMesh: InstancedMesh | undefined;
-    renderedTreeMesh: InstancedMesh | undefined;
-    pointSize: number = .1;
-    clock: Clock = new Clock();
+    public rapier: Rapier;
+    public physicsWorld: World;
+    public scene: Scene;
+    public mapPoints: Array<MapPoint> = [];
+    public renderedBuildingMesh: InstancedMesh | undefined;
+    public renderedTreeMesh: InstancedMesh | undefined;
+    public pointSize: number = .1;
+    public clock: Clock = new Clock();
 
-    origin = { x: -150, y: 330 };
-    pointsFillGap = .2;
-    minPointDistance = 0.08;
-    pointsJitter = 0.2;
+    public origin = { x: -150, y: 330 };
+    public pointsFillGap = .2;
+    public minPointDistance = 0.08;
+    public pointsJitter = 0.2;
+
+    public reflectedSound: Sound;
 
     constructor(
         rapier: Rapier,
         physicsWorld: World,
         scene: Scene,
+        reflectedSound: Sound
     ) {
         this.rapier = rapier;
         this.physicsWorld = physicsWorld;
         this.scene = scene;
+
+        this.reflectedSound = reflectedSound;
 
         this.buildBuildings();
         // this.buildTrees();
@@ -146,7 +153,7 @@ export class Map {
         const dummy = new Object3D();
         coordinates.forEach((coordinate, i) => {
             // create points for physics simulation
-            const newPoint = new MapPoint(this.rapier, this.physicsWorld!, 'building', coordinate.x, coordinate.y, this.pointSize);
+            const newPoint = new MapPoint(this.rapier, this.physicsWorld!, 'building', coordinate.x, coordinate.y, this.pointSize, this.reflectedSound);
             this.mapPoints.push(newPoint);
 
             // set positions of rendered points in instanced mesh
@@ -276,17 +283,27 @@ class MapPoint {
     public x: number;
     public y: number;
     public surfaceBody: RigidBody;
-    private pointSize: number = .1;
+    public pointSize: number = .1;
+    public reflectedSound: Sound;
     public clock: Clock = new Clock();
     public brightnessDecayTime = 10;
     public hue = (Math.floor(Math.random() * 70) + 280) % 360;
 
-    constructor(rapier: Rapier, physicsWorld: World, type: string, x: number, y: number, pointSize: number) {
+    constructor(
+        rapier: Rapier,
+        physicsWorld: World,
+        type: string,
+        x: number,
+        y: number,
+        pointSize: number,
+        reflectedSound: Sound
+    ) {
         this.rapier = rapier;
         this.type = type;
         this.x = x;
         this.y = y;
         this.pointSize = pointSize;
+        this.reflectedSound = reflectedSound;
 
         // Create physics simulation point
         const rbDesc = this.rapier.RigidBodyDesc.kinematicPositionBased()
@@ -311,5 +328,9 @@ class MapPoint {
 
     public setState(state: string) {
         this.state = state;
+    }
+
+    public playReflectedSound(volume: number, detune: number) {
+        this.reflectedSound.play(volume, detune);
     }
 }
