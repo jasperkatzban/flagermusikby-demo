@@ -27,7 +27,7 @@ export class Map {
 
     public origin = { x: -150, y: 330 };
     public pointsFillGap = .5;
-    public minPointDistance = 0.08;
+    public minPointDistance = 0.2;
     public pointsJitter = 0.2;
 
     public reflectedSound: Sound;
@@ -239,31 +239,43 @@ export class Map {
     // }
 
     public update() {
+        const dummy = new Object3D();
+        // set positions of rendered points in instanced mesh
+
         this.mapPoints.forEach((mapPoint, i) => {
-            this.updaterenderedBuildingMeshColor(i, mapPoint);
+            let color = new Color(0x000000);
+
+            let brightness = 0;
+            switch (mapPoint.state) {
+                case "collided":
+                    brightness = Math.max(1 - (mapPoint.clock.getElapsedTime() / mapPoint.brightnessDecayTime), .3) * 100;
+                    brightness += 10 * Math.cos(3 * (mapPoint.hue + this.clock.getElapsedTime()));
+                    brightness = Math.min(100, Math.max(0, brightness));
+                    color = new Color(`hsl(${mapPoint.hue}, 100%, ${brightness}%)`);
+                    break;
+            }
+
+            this.renderedBuildingMesh!.setColorAt(i, color);
+
+            if (this.renderedBuildingMesh!.instanceColor) {
+                this.renderedBuildingMesh!.instanceColor.needsUpdate = true;
+            }
+
+            const jitterScale = .3 * Math.max(1 - (mapPoint.clock.getElapsedTime() / (mapPoint.brightnessDecayTime / 2.5)), .1);
+            const jitter = { x: Math.random() * jitterScale, y: Math.random() * jitterScale }
+            dummy.position.set(mapPoint.x + jitter.x, mapPoint.y + jitter.y, 0);
+
+            const scale = .6 + brightness / 200;
+            dummy.scale.set(scale, scale, 1);
+            dummy.updateMatrix();
+
+            this.renderedBuildingMesh!.setMatrixAt(i, dummy.matrix);
+
+            if (this.renderedBuildingMesh!.instanceMatrix) {
+                this.renderedBuildingMesh!.instanceMatrix.needsUpdate = true;
+            }
         })
     }
-
-    // TODO: set color based on object type too
-    public updaterenderedBuildingMeshColor(index: number, mapPoint: MapPoint) {
-        let color = new Color(0x000000);
-
-        switch (mapPoint.state) {
-            case "collided":
-                let brightness = Math.max(1 - (mapPoint.clock.getElapsedTime() / mapPoint.brightnessDecayTime), .3) * 100;
-                brightness += 10 * Math.cos(3 * (mapPoint.hue + this.clock.getElapsedTime()));
-                brightness = Math.min(100, Math.max(0, brightness));
-                color = new Color(`hsl(${mapPoint.hue}, 100%, ${brightness}%)`);
-                break;
-        }
-
-        this.renderedBuildingMesh!.setColorAt(index, color);
-
-        if (this.renderedBuildingMesh!.instanceColor) {
-            this.renderedBuildingMesh!.instanceColor.needsUpdate = true;
-        }
-    }
-
     // TODO: specify type of collision based on type of material contacted
     public checkCollisionEvents(handle1: number, handle2: number) {
         this.mapPoints.forEach((point) => {
@@ -286,7 +298,7 @@ class MapPoint {
     public pointSize: number = .1;
     public reflectedSound: Sound;
     public clock: Clock = new Clock();
-    public brightnessDecayTime = 10;
+    public brightnessDecayTime = 5;
     public hue = (Math.floor(Math.random() * 70) + 280) % 360;
 
     constructor(
@@ -313,7 +325,6 @@ class MapPoint {
 
         // Create collider for point
         const clDesc = this.rapier.ColliderDesc.ball(this.pointSize)
-            // const clDesc = rapier.ColliderDesc.cuboid(this.pointSize, this.pointSize)
             .setFriction(0.0)
             .setFrictionCombineRule(this.rapier.CoefficientCombineRule.Max)
             .setRestitution(1.0)
