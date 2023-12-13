@@ -5,7 +5,7 @@ import {
   OrthographicCamera,
   AmbientLight,
   Mesh,
-  SphereGeometry,
+  TorusKnotGeometry,
   Vector2,
   Vector3,
   Vector4,
@@ -83,7 +83,7 @@ export class Engine {
       this.frustumSize / 2,
       this.frustumSize / - 2, 0.1, 100
     );
-    this.camera.position.set(0, 0, 1);
+    this.camera.position.set(0, 0, 100);
     this.camera.updateMatrixWorld();
 
     this.renderer = this.createRenderer();
@@ -151,7 +151,7 @@ export class Engine {
       vertexShader: toonVertexShader,
       fragmentShader: toonFragmentShader,
     })
-    const cursorGeometry = new SphereGeometry(.4, 5);
+    const cursorGeometry = new TorusKnotGeometry(.15, .4, 64, 32, 2, 3);
     this.cursorMesh = new Mesh(cursorGeometry, cursorMaterial);
     this.scene.add(this.cursorMesh)
 
@@ -265,12 +265,24 @@ export class Engine {
     this.cursorPos.y = this.lerp(this.cursorPos.y, targetCursorPos.y, 0.15);
     this.cursorMesh?.position.copy(this.cursorPos);
 
-    const cursorPosDelta = Math.sqrt((this.cursorPos.x - targetCursorPos.x) ** 2 + (this.cursorPos.y - targetCursorPos.y) ** 2);
-    this.cursorDisplacement += cursorPosDelta;
-    let cursorExpression = 1 + (.3 + cursorPosDelta * .02) * Math.sin(this.cursorDisplacement / 7);
+    let cursorVelocityComps = { x: targetCursorPos.x - this.cursorPos.x, y: targetCursorPos.y - this.cursorPos.y }
+    const cursorVelocity = Math.sqrt(cursorVelocityComps.x ** 2 + cursorVelocityComps.y ** 2);
+    this.cursorDisplacement += cursorVelocity;
+    let cursorExpression = 1 + (.3 + cursorVelocity * .02) * Math.sin(this.cursorDisplacement / 7);
     cursorExpression = this.lerp(cursorExpression, .6, 0.15);
 
     this.cursorMesh?.scale.set(cursorExpression, cursorExpression, cursorExpression);
+
+    const cursorRotateFactor = (this.clock.getElapsedTime() / 3) % 2 * Math.PI;
+    let cursorAngle = Math.atan(cursorVelocityComps.y / cursorVelocityComps.x + .01)
+    if (cursorVelocityComps.x < 0) {
+      cursorAngle += Math.PI;
+    }
+    this.cursorMesh?.rotation.set(cursorRotateFactor, cursorAngle, 0);
+
+    let cursorBrightness = .3 + .1 * Math.sin(this.clock.getElapsedTime() * 2) + Math.abs(cursorVelocity) / 4
+    cursorBrightness = Math.min(cursorBrightness, 1.0);
+    (this.cursorMesh?.material as ShaderMaterial).uniforms.color.value = new Vector4(cursorBrightness, cursorBrightness, cursorBrightness, 1.0);
   }
 
   public fireClickEvent() {
