@@ -88,7 +88,6 @@ export class Engine {
 
     this.renderer = this.createRenderer();
     this.composer = new EffectComposer(this.renderer);
-    this.composer.setSize(window.innerWidth * 2, window.innerHeight * 2);
 
     const renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(renderPass);
@@ -96,6 +95,7 @@ export class Engine {
     const bloomPass = new UnrealBloomPass(new Vector2(window.innerWidth * 2, window.innerHeight * 2), .25, .5, 0.0);
     this.composer.addPass(bloomPass);
 
+    // TODO: resize vignette on window resize to avoid clipping
     let vignettePass = new ShaderPass(VignetteShader);
     vignettePass.uniforms["resolution"].value = new Vector2(window.innerWidth * 2, window.innerHeight * 2);
     this.composer.addPass(vignettePass);
@@ -222,13 +222,17 @@ export class Engine {
 
     for (const [key, wavefront] of Object.entries(this.wavefronts)) {
       wavefront.update();
-      for (const [key, point] of Object.entries(wavefront.points)) {
-        if (point.age > wavefront.lifespan) {
+
+      wavefront.points = wavefront.points.filter((point) => {
+        if (point.age <= wavefront.lifespan) {
+          return true;
+        } else {
           point.remove(this.physicsWorld!, this.scene);
-          delete wavefront.points[key as unknown as number];
+          return false;
         }
-      }
-      if (wavefront.points.length == 0) {
+      })
+
+      if (wavefront.points.length < 20) {
         wavefront.remove(this.scene, this.physicsWorld!);
         delete this.wavefronts[key];
       }
@@ -316,12 +320,18 @@ export class Engine {
   /** Handle window resize event. */
   private onWindowResize() {
     if (this.mount) {
-      const width = this.mount.clientWidth;
-      const height = this.mount.clientHeight;
+      this.aspect = window.innerWidth / window.innerHeight;
+      this.camera.left = this.frustumSize * this.aspect / - 2;
+      this.camera.right = this.frustumSize * this.aspect / 2;
+      this.camera.top = this.frustumSize / 2;
+      this.camera.bottom = this.frustumSize / - 2;
       this.camera.updateProjectionMatrix();
-      this.renderer.setSize(width, height);
+
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.composer.setSize(window.innerWidth, window.innerHeight);
+
       this.renderer.setPixelRatio(window.devicePixelRatio);
-      this.renderer.render(this.scene, this.camera);
+      this.composer.setPixelRatio(window.devicePixelRatio);
     }
   }
 

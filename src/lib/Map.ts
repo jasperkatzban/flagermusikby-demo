@@ -22,11 +22,11 @@ export class Map {
     public mapPoints: Array<MapPoint> = [];
     public renderedBuildingMesh: InstancedMesh | undefined;
     public renderedTreeMesh: InstancedMesh | undefined;
-    public pointSize: number = .1;
+    public pointSize: number = .3;
     public clock: Clock = new Clock();
 
     public origin = { x: -150, y: 330 };
-    public pointsFillGap = .2;
+    public pointsFillGap = .5;
     public minPointDistance = 0.08;
     public pointsJitter = 0.2;
 
