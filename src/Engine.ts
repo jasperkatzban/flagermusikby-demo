@@ -88,16 +88,16 @@ export class Engine {
 
     this.renderer = this.createRenderer();
     this.composer = new EffectComposer(this.renderer);
-    this.composer.setSize(window.innerWidth, window.innerHeight);
+    this.composer.setSize(window.innerWidth * 2, window.innerHeight * 2);
 
     const renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(renderPass);
 
-    const bloomPass = new UnrealBloomPass(new Vector2(window.innerWidth, window.innerHeight), .25, .5, 0.0);
+    const bloomPass = new UnrealBloomPass(new Vector2(window.innerWidth * 2, window.innerHeight * 2), .25, .5, 0.0);
     this.composer.addPass(bloomPass);
 
     let vignettePass = new ShaderPass(VignetteShader);
-    vignettePass.uniforms["resolution"].value = new Vector2(window.innerWidth, window.innerHeight);
+    vignettePass.uniforms["resolution"].value = new Vector2(window.innerWidth * 2, window.innerHeight * 2);
     this.composer.addPass(vignettePass);
 
     const afterimagePass = new AfterimagePass(.35);
@@ -151,7 +151,7 @@ export class Engine {
       vertexShader: toonVertexShader,
       fragmentShader: toonFragmentShader,
     })
-    const cursorGeometry = new TorusKnotGeometry(.15, .4, 64, 32, 2, 3);
+    const cursorGeometry = new TorusKnotGeometry(.15, .3, 64, 32, 2, 3);
     this.cursorMesh = new Mesh(cursorGeometry, cursorMaterial);
     this.scene.add(this.cursorMesh)
 
@@ -189,7 +189,6 @@ export class Engine {
 
     // Check for collision events
     this.eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
-      let mapPointType;
       let wavefrontDetune = 0;
       let wavefrontPointAge = 0;
       let wavefrontPointLifespan = 1;
@@ -212,7 +211,6 @@ export class Engine {
         if (point.handle == handle1 || point.handle == handle2) {
           point.setState('collided');
           point.clock.start();
-          mapPointType = point.type;
           // TODO: set pan
           point.playReflectedSound(volume, wavefrontDetune)
         }
@@ -273,12 +271,12 @@ export class Engine {
 
     this.cursorMesh?.scale.set(cursorExpression, cursorExpression, cursorExpression);
 
-    const cursorRotateFactor = (this.clock.getElapsedTime() / 3) % 2 * Math.PI;
-    let cursorAngle = Math.atan(cursorVelocityComps.y / cursorVelocityComps.x + .01)
+    const cursorRotateFactor = (1 + cursorVelocity / 5) * (this.clock.getElapsedTime() / 3) % 2 * Math.PI;
+    let cursorAngle = Math.atan(cursorVelocityComps.y / cursorVelocityComps.x + .00001)
     if (cursorVelocityComps.x < 0) {
       cursorAngle += Math.PI;
     }
-    this.cursorMesh?.rotation.set(cursorRotateFactor, cursorAngle, 0);
+    this.cursorMesh?.rotation.set(cursorRotateFactor, 0, 0);
 
     let cursorBrightness = .3 + .1 * Math.sin(this.clock.getElapsedTime() * 2) + Math.abs(cursorVelocity) / 4
     cursorBrightness = Math.min(cursorBrightness, 1.0);
@@ -328,7 +326,7 @@ export class Engine {
   }
 
   private createRenderer() {
-    const renderer = new WebGLRenderer({ antialias: true });
+    const renderer = new WebGLRenderer({ antialias: false });
     renderer.shadowMap.enabled = true;
     renderer.autoClear = true;
     renderer.autoClearColor = true;
