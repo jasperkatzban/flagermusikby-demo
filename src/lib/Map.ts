@@ -32,19 +32,18 @@ export class Map {
     public minPointDistance = 0.2;
     public pointsJitter = 0.2;
 
-    public reflectedSound: Sound;
+    public sounds: { reflectionBuilding: Sound, reflectionTree: Sound };
 
     constructor(
         rapier: Rapier,
         physicsWorld: World,
         scene: Scene,
-        reflectedSound: Sound
+        sounds: { reflectionBuilding: Sound, reflectionTree: Sound }
     ) {
         this.rapier = rapier;
         this.physicsWorld = physicsWorld;
         this.scene = scene;
-
-        this.reflectedSound = reflectedSound;
+        this.sounds = sounds;
 
         const buildingCoordinates = this.extractBuildingCoordinates();
         const treeCoordinates = this.extractTreeCoordinates();
@@ -195,7 +194,17 @@ export class Map {
         const dummy = new Object3D();
         coordinates.forEach((coordinate, i) => {
             // create points for physics simulation
-            const newPoint = new MapPoint(this.rapier, this.physicsWorld!, coordinate.type, coordinate.x, coordinate.y, this.pointSize, this.reflectedSound);
+            let soundAssignment: Sound;
+
+            if (coordinate.type == "building") {
+                soundAssignment = this.sounds.reflectionBuilding;
+            } else if (coordinate.type == "tree") {
+                soundAssignment = this.sounds.reflectionTree;
+            } else {
+                soundAssignment = this.sounds.reflectionBuilding;
+            }
+
+            const newPoint = new MapPoint(this.rapier, this.physicsWorld!, coordinate.type, coordinate.x, coordinate.y, this.pointSize, soundAssignment);
             this.mapPoints.push(newPoint);
 
             // set positions of rendered points in instanced mesh

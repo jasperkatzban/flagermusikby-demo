@@ -29,8 +29,9 @@ import { EventSource, ResourcePool } from './lib';
 import toonVertexShader from './shaders/toon.vert?raw'
 import toonFragmentShader from './shaders/toon.frag?raw'
 
-import tone from './sounds/tone.wav'
-import toneReverb from './sounds/tone-reverb.wav'
+import initial from './sounds/batCall.wav'
+import reflectionBuildingSound from './sounds/reflection-building.wav'
+import reflectionTreeSound from './sounds/reflection-tree.wav'
 
 // Set up FPS stats
 // const stats = new Stats()
@@ -72,8 +73,9 @@ export class Engine {
   public mousePos = new Vector2(0, 0);
 
   // Audio Setup
-  private defaultTone: Sound;
-  private defaultToneReverb: Sound;
+  private initialCall: Sound;
+  private reflectionBuilding: Sound;
+  private reflectionTree: Sound;
 
   constructor() {
     // Set up renderer scene
@@ -118,14 +120,16 @@ export class Engine {
     this.cursorPos = new Vector3(0, 0, 0);
 
     // Set up sound
-    this.defaultTone = new Sound(tone);
-    this.defaultToneReverb = new Sound(toneReverb);
+    this.initialCall = new Sound(initial);
+    this.reflectionBuilding = new Sound(reflectionBuildingSound);
+    this.reflectionTree = new Sound(reflectionTreeSound);
   }
 
   public loadSounds() {
     return Promise.all([
-      this.defaultTone.load(),
-      this.defaultToneReverb.load()
+      this.initialCall.load(),
+      this.reflectionBuilding.load(),
+      this.reflectionTree.load()
     ]);
   }
 
@@ -166,7 +170,8 @@ export class Engine {
 
     // Add world map after sounds are loaded
     this.loadSounds().then(values => {
-      this.map = new Map(this.rapier, this.physicsWorld, this.scene, this.defaultToneReverb);
+      const sounds = { reflectionBuilding: this.reflectionBuilding, reflectionTree: this.reflectionTree }
+      this.map = new Map(this.rapier, this.physicsWorld, this.scene, sounds);
     });
 
     const ambientLight = new AmbientLight('white', 20.0);
@@ -216,8 +221,6 @@ export class Engine {
 
       const volume = Math.max(.6 - Math.sqrt(wavefrontPointAge / wavefrontPointLifespan), 0);
 
-      // for (const [key, wavefront] of Object.entries(this.map?.mapPoints)) {
-      // }
       this.map?.mapPoints.forEach((point, i) => {
         if (point.handle == handle1 || point.handle == handle2) {
           point.setState('collided');
@@ -229,8 +232,6 @@ export class Engine {
         }
       })
     });
-
-    console.log(this.defaultToneReverb.numInstances);
 
     // Update environment and wavefronts
     this.map?.update()
@@ -304,7 +305,7 @@ export class Engine {
 
   public fireClickEvent() {
     const lifespan = 2;
-    const wavefront = new Wavefront(lifespan, this.cursorPos, this.defaultTone);
+    const wavefront = new Wavefront(lifespan, this.cursorPos, this.initialCall);
     wavefront.attach(this.rapier, this.physicsWorld!, this.scene);
     wavefront.playSoundEmission();
     this.wavefronts[this.time.toString()] = wavefront
