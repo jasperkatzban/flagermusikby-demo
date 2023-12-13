@@ -16,6 +16,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { AfterimagePass } from 'three/examples/jsm/postprocessing/AfterimagePass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { VignetteShader } from './shaders/vignette';
 import type { World } from '@dimforge/rapier2d';
@@ -91,6 +92,13 @@ export class Engine {
 
     const renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(renderPass);
+
+    const bokehPass = new BokehPass(this.scene, this.camera, {
+      focus: 99.9,
+      aperture: 0.025,
+      maxblur: .01
+    });
+    this.composer.addPass(bokehPass);
 
     const bloomPass = new UnrealBloomPass(new Vector2(window.innerWidth * 2, window.innerHeight * 2), .25, .5, 0.0);
     this.composer.addPass(bloomPass);
