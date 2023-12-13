@@ -32,9 +32,9 @@ import tone from './sounds/tone.wav'
 import toneReverb from './sounds/tone-reverb.wav'
 
 // Set up FPS stats
-const stats = new Stats()
-stats.showPanel(0)
-document.body.appendChild(stats.dom)
+// const stats = new Stats()
+// stats.showPanel(0)
+// document.body.appendChild(stats.dom)
 
 /** Contains the three.js renderer and handles to important resources. */
 export class Engine {
@@ -309,7 +309,7 @@ export class Engine {
     this.updateScene(deltaTime);
     this.render();
     this.frameId = window.requestAnimationFrame(this.animate);
-    stats.update()
+    // stats.update()
   }
 
   /** Render the scene. */
@@ -336,7 +336,7 @@ export class Engine {
   }
 
   private createRenderer() {
-    const renderer = new WebGLRenderer({ antialias: false });
+    const renderer = new WebGLRenderer({ antialias: false, depth: false, stencil: false, powerPreference: "high-performance" });
     renderer.shadowMap.enabled = true;
     renderer.autoClear = true;
     renderer.autoClearColor = true;
