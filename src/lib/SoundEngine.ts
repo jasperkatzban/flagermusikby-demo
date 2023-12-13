@@ -2,15 +2,12 @@ import {
 	AudioContext
 } from 'three';
 
-// TODO: what's this for? does threejs take care of it?
-// window.AudioContext = window.AudioContext || window.webkitAudioContext;
-
 var context = AudioContext.getContext();
 
 export class Sound {
 	url = '';
 	buffer = null;
-	sources = [];
+	numInstances = 0;
 
 	constructor(url: any) {
 		this.url = url;
@@ -56,13 +53,10 @@ export class Sound {
 		const source: AudioBufferSourceNode = context.createBufferSource();
 		source.buffer = this.buffer;
 
-		// Keep track of all sources created, and stop tracking them once they finish playing:
-		const insertedAt = this.sources.push(source) - 1;
-
 		source.onended = () => {
 			source.stop(0);
 
-			this.sources.splice(insertedAt, 1);
+			this.numInstances -= 1;
 		};
 
 		// Create a gain node with the desired volume:
@@ -77,15 +71,7 @@ export class Sound {
 
 		// Start playing at the desired time:
 		source.start(0);
-	}
 
-	stop() {
-		// Stop any sources still playing:
-
-		this.sources.forEach((source) => {
-			source.stop(0);
-		});
-
-		this.sources = [];
+		this.numInstances += 1;
 	}
 }

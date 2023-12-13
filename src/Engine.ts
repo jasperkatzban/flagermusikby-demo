@@ -93,12 +93,6 @@ export class Engine {
     const renderPass = new RenderPass(this.scene, this.camera);
     this.composer.addPass(renderPass);
 
-    const bokehPass = new BokehPass(this.scene, this.camera, {
-      focus: 99.9,
-      aperture: 0.025,
-      maxblur: .01
-    });
-    this.composer.addPass(bokehPass);
 
     const bloomPass = new UnrealBloomPass(new Vector2(window.innerWidth * 2, window.innerHeight * 2), .25, .5, 0.0);
     this.composer.addPass(bloomPass);
@@ -110,6 +104,13 @@ export class Engine {
 
     const afterimagePass = new AfterimagePass(.35);
     this.composer.addPass(afterimagePass);
+
+    const bokehPass = new BokehPass(this.scene, this.camera, {
+      focus: 99.9,
+      aperture: 0.025,
+      maxblur: .01
+    });
+    this.composer.addPass(bokehPass);
 
     const outputPass = new OutputPass();
     this.composer.addPass(outputPass);
@@ -215,15 +216,21 @@ export class Engine {
 
       const volume = Math.max(.6 - Math.sqrt(wavefrontPointAge / wavefrontPointLifespan), 0);
 
-      this.map?.mapPoints.forEach((point) => {
+      // for (const [key, wavefront] of Object.entries(this.map?.mapPoints)) {
+      // }
+      this.map?.mapPoints.forEach((point, i) => {
         if (point.handle == handle1 || point.handle == handle2) {
           point.setState('collided');
           point.clock.start();
           // TODO: set pan
-          point.playReflectedSound(volume, wavefrontDetune)
+          if (i % 5 == 0) {
+            point.playReflectedSound(volume, wavefrontDetune)
+          }
         }
       })
     });
+
+    console.log(this.defaultToneReverb.numInstances);
 
     // Update environment and wavefronts
     this.map?.update()
