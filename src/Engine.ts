@@ -99,6 +99,9 @@ export class Engine {
     const bloomPass = new UnrealBloomPass(new Vector2(window.innerWidth * 2, window.innerHeight * 2), .25, .5, 0.0);
     this.composer.addPass(bloomPass);
 
+    const smallBloomPass = new UnrealBloomPass(new Vector2(window.innerWidth * 2, window.innerHeight * 2), .1, -10.0, 0.0);
+    this.composer.addPass(smallBloomPass);
+
     // TODO: resize vignette on window resize to avoid clipping
     let vignettePass = new ShaderPass(VignetteShader);
     vignettePass.uniforms["resolution"].value = new Vector2(window.innerWidth * 2, window.innerHeight * 2);

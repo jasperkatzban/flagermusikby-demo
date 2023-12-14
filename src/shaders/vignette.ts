@@ -6,11 +6,11 @@ export const VignetteShader = {
         "tDiffuse": { type: "t", value: null },
 
         "resolution": { type: "v2", value: new Vector2() },
-        "gain": { type: "f", value: 0.7 },
+        "gain": { type: "f", value: 0.6 },
 
         "horizontal": { type: "bool", value: false },
         "radius": { type: "f", value: 0.75 },
-        "softness": { type: "f", value: .3 },
+        "softness": { type: "f", value: .6 },
     },
 
     vertexShader: [

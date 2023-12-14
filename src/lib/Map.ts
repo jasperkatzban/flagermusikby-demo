@@ -27,8 +27,8 @@ export class Map {
     public pointSize: number = .3;
     public clock: Clock = new Clock();
 
-    public origin = { x: -110, y: 50 };
-    public pointsFillGap = .5;
+    public origin = { x: -300, y: 155 };
+    public pointsFillGap = .7;
     public minPointDistance = 0.2;
     public pointsJitter = 0.2;
 
@@ -70,7 +70,7 @@ export class Map {
                         let coordinates = nested.properties.points.split(" ");
                         coordinates = coordinates.map((coordinate: string) => parseFloat(coordinate));
 
-                        for (let i = 0; i < coordinates.length - 3; i += 4) {
+                        for (let i = 0; i < coordinates.length - 3; i += 2) {
                             const segment = {
                                 x1: coordinates[i] + this.origin.x,
                                 y1: -coordinates[i + 1] + this.origin.y,
@@ -315,7 +315,7 @@ export class MapPoint {
         this.surfaceBody = physicsWorld.createRigidBody(rbDesc);
 
         // Create collider for point
-        const clDesc = this.rapier.ColliderDesc.ball(this.pointSize)
+        const clDesc = this.rapier.ColliderDesc.ball(this.pointSize + .1)
             .setFriction(0.0)
             .setFrictionCombineRule(this.rapier.CoefficientCombineRule.Max)
             .setRestitution(1.0)
