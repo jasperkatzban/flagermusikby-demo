@@ -262,11 +262,6 @@ export class Map {
                         break;
 
                 }
-                this.mapPointInstancedMesh!.setColorAt(i, color);
-
-                if (this.mapPointInstancedMesh!.instanceColor) {
-                    this.mapPointInstancedMesh!.instanceColor.needsUpdate = true;
-                }
 
                 this.mapPointInstancedMesh!.setMatrixAt(i, dummy.matrix);
 
@@ -274,11 +269,16 @@ export class Map {
                     this.mapPointInstancedMesh!.instanceMatrix.needsUpdate = true;
                 }
             }
+            this.mapPointInstancedMesh!.setColorAt(i, color);
+
+            if (this.mapPointInstancedMesh!.instanceColor) {
+                this.mapPointInstancedMesh!.instanceColor.needsUpdate = true;
+            }
         })
     }
 }
 
-class MapPoint {
+export class MapPoint {
     public rapier: Rapier;
     public type: string;
     public handle: number = -1;

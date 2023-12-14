@@ -141,7 +141,7 @@ export class Wavefront {
     }
 }
 
-class WavefrontPoint {
+export class WavefrontPoint {
     public handle?: number;
     public state: string = 'clean';
     public needsUpdate: boolean = false;
@@ -155,6 +155,7 @@ class WavefrontPoint {
     public jitter: number;
     public age: number;
     public lifespan: number;
+    public hue: number;
     public clock: Clock
 
     constructor(x: number, y: number, xVel: number, yVel: number, pointSize: number, jitter: number, lifespan: number) {
@@ -166,6 +167,7 @@ class WavefrontPoint {
         this.jitter = jitter;
         this.lifespan = lifespan
         this.age = 0;
+        this.hue = 40;
 
         this.clock = new Clock();
         this.clock.start();
@@ -242,8 +244,7 @@ class WavefrontPoint {
         this.age += this.clock.getDelta()
 
         const brightness = (1 - this.age / this.lifespan) * 100;
-        const hue = 270;
-        const color = new Color(`hsl(${hue}, 100%, ${brightness}%)`);
+        const color = new Color(`hsl(${this.hue}, 100%, ${brightness}%)`);
         let colorRGB = new Color(1, 1, 1);
         color.getRGB(colorRGB);
 

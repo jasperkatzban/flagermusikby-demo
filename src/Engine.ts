@@ -23,7 +23,7 @@ import type { World } from '@dimforge/rapier2d';
 import { getRapier, Rapier } from './physics/rapier';
 import Stats from 'stats.js';
 
-import { Wavefront, Map, Sound } from './lib';
+import { Wavefront, WavefrontPoint, Map, MapPoint, Sound } from './lib';
 import { EventSource, ResourcePool } from './lib';
 
 import toonVertexShader from './shaders/toon.vert?raw'
@@ -203,25 +203,30 @@ export class Engine {
 
     // Check for collision events
     this.eventQueue.drainCollisionEvents((handle1: number, handle2: number, started: boolean) => {
+      let wavefrontPoint: WavefrontPoint;
       let wavefrontDetune = 0;
       let wavefrontPointAge = 0;
       let wavefrontPointLifespan = 1;
 
+      let mapPoint: MapPoint;
+
       for (const [key, wavefront] of Object.entries(this.wavefronts)) {
         wavefrontDetune = wavefront.detune;
-        wavefront.points.forEach((point) => {
+        wavefront.points.forEach((point: WavefrontPoint) => {
           if (point.handle == handle1 || point.handle == handle2) {
             point.state = 'collided';
             point.needsUpdate = true;
             wavefrontPointAge = point.age;
             wavefrontPointLifespan = point.lifespan;
+
+            wavefrontPoint = point;
           }
         });
       }
 
       const volume = Math.max(.6 - Math.sqrt(wavefrontPointAge / wavefrontPointLifespan), 0);
 
-      this.map?.mapPoints.forEach((point, i) => {
+      this.map?.mapPoints.forEach((point: MapPoint, i: number) => {
         if (point.handle == handle1 || point.handle == handle2) {
           point.setState('collided');
           point.clock.start();
@@ -229,8 +234,13 @@ export class Engine {
           if (i % 5 == 0) {
             point.playReflectedSound(volume, wavefrontDetune)
           }
+
+          mapPoint = point;
         }
       })
+
+      wavefrontPoint!.hue = mapPoint!.hue;
+
     });
 
     // Update environment and wavefronts
@@ -239,7 +249,7 @@ export class Engine {
     for (const [key, wavefront] of Object.entries(this.wavefronts)) {
       wavefront.update();
 
-      wavefront.points = wavefront.points.filter((point) => {
+      wavefront.points = wavefront.points.filter((point: WavefrontPoint) => {
         if (point.age <= wavefront.lifespan) {
           return true;
         } else {
