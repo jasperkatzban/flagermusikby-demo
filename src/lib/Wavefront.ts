@@ -15,7 +15,7 @@ import { Sound } from '../lib'
 import toonVertexShader from '../shaders/toon.vert?raw'
 import toonFragmentShader from '../shaders/toon.frag?raw'
 
-const pitches = [0, 2, 4, 7, 11, 12];
+const pitches = [-8, -5, 1, 0, 2, 4, 7, 11, 12];
 
 export class Wavefront {
     public lifespan: number;
@@ -226,7 +226,7 @@ export class WavefrontPoint {
             if (this.state == 'collided') {
                 // Reset age clock
                 // this should have a counter for number of reflections to keep particles from reflecting forever
-                this.age /= 9;
+                this.age -= .2;
 
                 // Update color in renderer
                 (this.sphereMesh.material as ShaderMaterial).uniforms.color.value = new Vector4(0.0, 0.0, 1.0, 1.0);

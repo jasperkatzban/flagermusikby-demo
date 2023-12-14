@@ -261,7 +261,7 @@ export class Engine {
         }
       })
 
-      if (wavefront.points.length < 20) {
+      if (wavefront.points.length < 10) {
         wavefront.remove(this.scene, this.physicsWorld!);
         delete this.wavefronts[key];
       }
